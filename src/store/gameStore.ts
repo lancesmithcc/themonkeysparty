@@ -488,106 +488,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Second NPC movement functions (similar to first NPC but with different patterns)
   updateSecondNpcPosition: () => {
+    console.log("Updating second NPC position");
+    // Simple version just to test visibility
     set((state) => {
-      // Skip movement if collision is happening or movement is disabled
-      if (state.isColliding || !state.shouldSecondNpcMove) {
-        return state;
-      }
-
-      const deltaTime = 1; // Fixed for consistency
-      const { secondNpcWanderTimer, secondNpcFibStep, secondNpcFibDirection } = state;
-      
-      // Fibonacci sequence for a more interesting movement pattern
-      const fibValues = [1, 1, 2, 3, 5, 8, 13, 21, 34];
-      const fibValue = fibValues[secondNpcFibStep];
-      
-      // Check if timer is up
-      if (secondNpcWanderTimer <= 0) {
-        // Reset timer with Fibonacci-based timeout (shorter than first NPC)
-        const newTimer = fibValue * 7 + 3; // Slightly more dynamic than first NPC
-        
-        // Set new direction at a more varied angle - more graceful, wider turns
-        const angleChange = (Math.random() * 40 + 20) * (Math.random() > 0.5 ? 1 : -1); // 20-60 degrees
-        const currentAngle = Math.atan2(state.secondNpcMoveDirection.x, state.secondNpcMoveDirection.z);
-        const newAngle = currentAngle + (angleChange * Math.PI / 180); 
-        
-        // Calculate new direction vector
-        const newDirectionX = Math.sin(newAngle);
-        const newDirectionZ = Math.cos(newAngle);
-        
-        // Create new direction vector
-        const newMoveDirection = new THREE.Vector3(newDirectionX, 0, newDirectionZ).normalize();
-        
-        // Update Fibonacci step for next movement pattern
-        let newFibStep = state.secondNpcFibStep + state.secondNpcFibDirection;
-        let newFibDirection = state.secondNpcFibDirection;
-        
-        // Reset Fibonacci sequence when reaching limits
-        if (newFibStep >= fibValues.length - 1) {
-          newFibDirection = -1;
-          newFibStep = fibValues.length - 2;
-        } else if (newFibStep <= 0) {
-          newFibDirection = 1;
-          newFibStep = 1;
-        }
-        
-        // Set new target position
-        return setNewSecondNpcTarget(state, {
-          timer: newTimer,
-          moveDirection: newMoveDirection,
-          fibStep: newFibStep,
-          fibDirection: newFibDirection
-        });
-      }
-      
-      // Move NPC towards target
-      const newPosition = new THREE.Vector3().copy(state.secondNpcPosition);
-      
-      // Apply movement based on direction
-      newPosition.x += state.secondNpcMoveDirection.x * MOVEMENT_SPEED * 1.2; // Slightly faster
-      newPosition.z += state.secondNpcMoveDirection.z * MOVEMENT_SPEED * 1.2;
-      
-      // Constrain to platform
-      const distanceFromCenter = Math.sqrt(
-        newPosition.x * newPosition.x + newPosition.z * newPosition.z
-      );
-      
-      if (distanceFromCenter > PLATFORM_RADIUS) {
-        // Bounce from edge with a graceful angle
-        const angle = Math.atan2(newPosition.x, newPosition.z);
-        
-        // Set position at boundary
-        newPosition.x = Math.sin(angle) * PLATFORM_RADIUS * 0.95;
-        newPosition.z = Math.cos(angle) * PLATFORM_RADIUS * 0.95;
-        
-        // Calculate reflection angle with a graceful variation
-        const reflectionVariation = (Math.random() * 30 - 15) * Math.PI / 180; // ±15 degrees for elegance
-        const reflectionAngle = angle + Math.PI + reflectionVariation;
-        
-        // Update movement direction with reflection
-        const newDirectionX = Math.sin(reflectionAngle);
-        const newDirectionZ = Math.cos(reflectionAngle);
-        
-        return {
-          ...state,
-          secondNpcPosition: [newPosition.x, newPosition.y, newPosition.z],
-          secondNpcMoveDirection: new THREE.Vector3(newDirectionX, 0, newDirectionZ).normalize(),
-          secondNpcRotation: [0, Math.atan2(newDirectionX, newDirectionZ), 0]
-        };
-      }
-      
-      // Apply rotation to face movement direction
-      const newRotation: [number, number, number] = [
-        0,
-        Math.atan2(state.secondNpcMoveDirection.x, state.secondNpcMoveDirection.z),
-        0
-      ];
-      
       return {
         ...state,
-        secondNpcPosition: [newPosition.x, newPosition.y, newPosition.z],
-        secondNpcRotation: newRotation,
-        secondNpcWanderTimer: secondNpcWanderTimer - deltaTime
+        // Rotate in a simple circle pattern for testing
+        secondNpcPosition: [
+          Math.sin(Date.now() * 0.0005) * 3,
+          0,
+          Math.cos(Date.now() * 0.0005) * 3
+        ],
+        secondNpcRotation: [
+          0,
+          Math.atan2(Math.sin(Date.now() * 0.0005), Math.cos(Date.now() * 0.0005)),
+          0
+        ]
       };
     });
   },
