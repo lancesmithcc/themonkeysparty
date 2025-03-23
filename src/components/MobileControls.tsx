@@ -4,7 +4,19 @@ import { useGameStore } from '../store/gameStore'
 import * as THREE from 'three'
 
 export default function MobileControls() {
-  const { camera } = useThree()
+  // Safely access Three.js context with a try/catch to prevent crashes
+  const threeContext = (() => {
+    try {
+      return useThree()
+    } catch (error) {
+      // Return a dummy camera if not inside a Canvas context
+      return { 
+        camera: null 
+      }
+    }
+  })()
+  
+  const { camera } = threeContext
   const setMoveDirection = useGameStore((state) => state.setMoveDirection)
   const initialDistance = useRef<number | null>(null)
   const initialRotation = useRef<number | null>(null)
@@ -99,8 +111,8 @@ export default function MobileControls() {
             setMoveDirection(new THREE.Vector3(0, 0, 0))
           }
         }
-      } else if (e.touches.length === 2 && initialDistance.current !== null) {
-        // Pinch-zoom
+      } else if (e.touches.length === 2 && initialDistance.current !== null && camera) {
+        // Only run pinch-zoom if camera is available
         const touch1 = e.touches[0]
         const touch2 = e.touches[1]
         
