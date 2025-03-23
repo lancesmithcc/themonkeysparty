@@ -154,7 +154,7 @@ export default function Npc() {
   }, [actions, npcMoveDirection.length()]);
 
   // Animation and movement in each frame
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (!ref.current) return;
     
     // Update aura time uniform
