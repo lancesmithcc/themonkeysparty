@@ -22,7 +22,6 @@ export default function MobileControls() {
   const initialRotation = useRef<number | null>(null)
   const touchStartPos = useRef<{x: number, y: number} | null>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
-  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 })
   const [isTouching, setIsTouching] = useState(false)
   
   // Detect mobile device
@@ -61,7 +60,6 @@ export default function MobileControls() {
         // Single touch for cursor control
         const touch = e.touches[0]
         touchStartPos.current = { x: touch.clientX, y: touch.clientY }
-        setCursorPosition({ x: touch.clientX, y: touch.clientY })
         setIsTouching(true)
       } else if (e.touches.length === 2) {
         // Double touch for pinch-zoom
@@ -89,9 +87,6 @@ export default function MobileControls() {
         const y = touch.clientY
         
         if (touchStartPos.current) {
-          // Update cursor position
-          setCursorPosition({ x, y })
-          
           // Calculate swipe direction for character movement
           const deltaX = x - touchStartPos.current.x
           const deltaY = y - touchStartPos.current.y
@@ -171,31 +166,28 @@ export default function MobileControls() {
   if (!isMobile) return null
   
   return (
-    <div 
-      ref={cursorRef}
-      className={`absolute pointer-events-none w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 z-[9000] transition-all ${
-        isTouching ? 'opacity-100' : 'opacity-50'
-      }`}
-      style={{
-        left: `${cursorPosition.x}px`,
-        top: `${cursorPosition.y}px`,
-      }}
-    >
-      {/* Nintendo-style cursor */}
-      <div className="w-full h-full flex items-center justify-center nintendo-cursor">
-        <div className="w-12 h-12 rounded-full border-4 border-white opacity-70 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full bg-white opacity-70 flex items-center justify-center">
-            <div className="w-4 h-4 rounded-full bg-red-500"></div>
+    <>
+      {/* Fixed position control pad in bottom left corner */}
+      <div 
+        ref={cursorRef}
+        className={`fixed bottom-5 left-5 pointer-events-none w-20 h-20 z-[9999] transition-all ${
+          isTouching ? 'opacity-100' : 'opacity-60'
+        }`}
+      >
+        {/* Nintendo-style cursor */}
+        <div className="w-full h-full flex items-center justify-center nintendo-cursor">
+          <div className="w-16 h-16 rounded-full border-4 border-white opacity-80 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-white opacity-80 flex items-center justify-center">
+              <div className="w-5 h-5 rounded-full bg-red-500"></div>
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Touch instructions - shown when not touching */}
-      {!isTouching && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 text-white text-xs p-2 rounded-lg whitespace-nowrap">
-          Swipe to move • Pinch to zoom & rotate
-        </div>
-      )}
-    </div>
+      {/* Touch instructions */}
+      <div className="fixed bottom-28 left-5 z-[9999] bg-black bg-opacity-70 text-white text-xs p-2 rounded-lg whitespace-nowrap">
+        Swipe to move • Pinch to zoom & rotate
+      </div>
+    </>
   )
 } 
