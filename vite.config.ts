@@ -10,6 +10,11 @@ export default defineConfig({
   },
   // Set base path to root for Netlify deployment
   base: '/',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  },
   // Ensure assets are properly handled
   build: {
     outDir: 'dist',
@@ -19,8 +24,20 @@ export default defineConfig({
       input: {
         main: path.resolve(process.cwd(), 'index.html'),
       },
+      output: {
+        manualChunks: {
+          'models': ['./public/models'],
+          'sprites': ['./public/sprites']
+        }
+      }
+    },
+  },
+  server: {
+    fs: {
+      // Allow serving files from one level up to the project root
+      allow: ['..'],
     },
   },
   // Properly handle binary files like GLB models
-  assetsInclude: ['**/*.glb', '**/*.png'],
+  assetsInclude: ['**/*.glb', '**/*.png', '**/*.gltf', '**/*.bin', '**/*.jpg', '**/*.jpeg'],
 });
