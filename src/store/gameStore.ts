@@ -3,7 +3,10 @@ import * as THREE from 'three';
 
 // Constants for platform bounds checking
 const PLATFORM_RADIUS = 4;
-const MOVEMENT_SPEED = 0.1;
+const MOVEMENT_SPEED = 0.05; // Reduced base speed for smoother movement
+const MAX_SPEED = 0.1; // Maximum speed after acceleration
+const ACCELERATION = 0.005; // How quickly player reaches max speed
+const DECELERATION = 0.01; // How quickly player slows down
 const COLLISION_DISTANCE = 0.8;
 const COLLISION_DURATION = 1500; // ms
 const COLLISION_KNOCKBACK = 0.5;
@@ -22,11 +25,30 @@ function isWithinHexagon(x: number, z: number, radius: number): boolean {
   return true;
 }
 
+// Fibonacci sequence helper for NPC movement
+function getFibonacciNumber(n: number): number {
+  if (n <= 0) return 0;
+  if (n === 1) return 1;
+  
+  let a = 0;
+  let b = 1;
+  let result = 0;
+  
+  for (let i = 2; i <= n; i++) {
+    result = a + b;
+    a = b;
+    b = result;
+  }
+  
+  return result;
+}
+
 // Define the game state interface
 export interface GameState {
   // Player state
   playerPosition: [number, number, number];
   moveDirection: THREE.Vector3;
+  currentSpeed: number;
   isPlayerMoving: boolean;
   isStrafing: boolean;
   
@@ -35,6 +57,8 @@ export interface GameState {
   npcMoveDirection: THREE.Vector3;
   npcTarget: [number, number, number];
   npcWanderTimer: number;
+  npcFibStep: number;
+  npcFibDirection: number;
   
   // Collision state
   isColliding: boolean;
@@ -63,6 +87,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Player state
   playerPosition: [0, 0, 0],
   moveDirection: new THREE.Vector3(0, 0, 0),
+  currentSpeed: 0,
   isPlayerMoving: false,
   isStrafing: false,
   
@@ -71,6 +96,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   npcMoveDirection: new THREE.Vector3(0, 0, 0),
   npcTarget: [2, 0, 2],
   npcWanderTimer: 0,
+  npcFibStep: 1,
+  npcFibDirection: 0,
   
   // Collision state
   isColliding: false,
@@ -169,32 +196,63 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
   
-  // Update the player's position based on the movement direction
+  // Update the player's position based on the movement direction with smooth acceleration/deceleration
   updatePosition: () => {
-    const { playerPosition, moveDirection, isColliding } = get();
+    const { playerPosition, moveDirection, isColliding, currentSpeed, isPlayerMoving } = get();
     
     // No movement during collision animation
     if (isColliding) return;
     
-    // Normalize for diagonal movement
-    const normalizedDirection = moveDirection.clone().normalize();
+    // Calculate new speed with acceleration or deceleration
+    let newSpeed = currentSpeed;
     
-    // Calculate new position
-    const newX = playerPosition[0] + normalizedDirection.x * MOVEMENT_SPEED;
-    const newZ = playerPosition[2] + normalizedDirection.z * MOVEMENT_SPEED;
+    if (isPlayerMoving) {
+      // Accelerate when moving
+      newSpeed = Math.min(currentSpeed + ACCELERATION, MAX_SPEED);
+    } else {
+      // Decelerate when not pressing any keys
+      newSpeed = Math.max(currentSpeed - DECELERATION, 0);
+    }
     
-    // Check if the new position is within bounds
-    if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
-      set({ playerPosition: [newX, playerPosition[1], newZ] });
+    // Only update position if we have some speed
+    if (newSpeed > 0) {
+      // Normalize for diagonal movement
+      const normalizedDirection = moveDirection.clone().normalize();
+      
+      // Calculate new position
+      const newX = playerPosition[0] + normalizedDirection.x * newSpeed;
+      const newZ = playerPosition[2] + normalizedDirection.z * newSpeed;
+      
+      // Check if the new position is within bounds
+      if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
+        set({ 
+          playerPosition: [newX, playerPosition[1], newZ],
+          currentSpeed: newSpeed
+        });
+      } else {
+        // Hit boundary, reduce speed more quickly
+        set({ currentSpeed: newSpeed * 0.5 });
+      }
+    } else {
+      // If speed is zero, ensure we store that
+      set({ currentSpeed: 0 });
     }
     
     // Check for collision with NPC
     get().checkCollision();
   },
   
-  // Update NPC position
+  // Update NPC position with Fibonacci pattern
   updateNpcPosition: () => {
-    const { npcPosition, npcTarget, npcWanderTimer, npcMoveDirection, isColliding } = get();
+    const { 
+      npcPosition, 
+      npcTarget, 
+      npcWanderTimer, 
+      npcMoveDirection, 
+      isColliding,
+      npcFibStep,
+      npcFibDirection
+    } = get();
     
     // No movement during collision animation
     if (isColliding) return;
@@ -202,8 +260,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Update wander timer and set new target if needed
     const newTimer = npcWanderTimer - 1;
     if (newTimer <= 0) {
+      // Use Fibonacci pattern for movement
+      const nextFibStep = (npcFibStep % 7) + 1; // Cycle through first 7 Fibonacci numbers
+      const fibValue = getFibonacciNumber(nextFibStep);
+      
+      // Increment direction by 45 degrees (π/4) each Fibonacci step
+      const nextDirection = (npcFibDirection + Math.PI / 4) % (2 * Math.PI);
+      
+      set({ 
+        npcFibStep: nextFibStep,
+        npcFibDirection: nextDirection,
+        npcWanderTimer: fibValue * 30 + 50 // Scale Fibonacci number for timer
+      });
+      
       get().setNewNpcTarget();
-      set({ npcWanderTimer: Math.random() * 100 + 100 }); // 100-200 frames
       return;
     }
     
@@ -219,7 +289,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (distanceToTarget < 0.2) {
       set({ 
         npcMoveDirection: new THREE.Vector3(0, 0, 0),
-        npcWanderTimer: Math.random() * 50 + 50 // Shorter pause at destination
+        // Use Fibonacci sequence for pause duration
+        npcWanderTimer: getFibonacciNumber(npcFibStep) * 20
       });
       return;
     }
@@ -228,8 +299,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     targetVector.normalize();
     set({ npcMoveDirection: targetVector });
     
-    // Move towards target
-    const speed = MOVEMENT_SPEED * 0.7; // NPC moves slightly slower
+    // Move towards target with smoother, varied speed
+    // Speed oscillates based on Fibonacci pattern
+    const fibMod = (Math.sin(getFibonacciNumber(npcFibStep) * 0.1) + 1) * 0.5; // 0 to 1
+    const speed = MOVEMENT_SPEED * (0.6 + fibMod * 0.7); // 0.6 to 1.3 × base speed
+    
     const newX = npcPosition[0] + targetVector.x * speed;
     const newZ = npcPosition[2] + targetVector.z * speed;
     
@@ -245,17 +319,34 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().checkCollision();
   },
   
-  // Set a new random target for the NPC
+  // Set a new target for the NPC based on Fibonacci pattern
   setNewNpcTarget: () => {
-    // Random angle and distance within the platform
-    const angle = Math.random() * Math.PI * 2;
-    const distance = Math.random() * PLATFORM_RADIUS * 0.8;
+    const { npcFibStep, npcFibDirection, npcPosition } = get();
     
-    // Calculate new target position
-    const newX = Math.cos(angle) * distance;
-    const newZ = Math.sin(angle) * distance;
+    // Use Fibonacci number to determine distance
+    const fibNumber = getFibonacciNumber(npcFibStep);
+    const normalizedFib = fibNumber / 10; // Scale down to reasonable values
+    const distance = PLATFORM_RADIUS * 0.5 * Math.min(normalizedFib, 0.8); // Cap at 80% of platform radius
     
-    set({ npcTarget: [newX, 0, newZ] });
+    // Calculate new target position using the Fibonacci direction
+    const newX = npcPosition[0] + Math.cos(npcFibDirection) * distance;
+    const newZ = npcPosition[2] + Math.sin(npcFibDirection) * distance;
+    
+    // Ensure target is within platform bounds
+    if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
+      set({ npcTarget: [newX, 0, newZ] });
+    } else {
+      // If outside bounds, pick a point toward center
+      const angle = Math.atan2(npcPosition[2], npcPosition[0]) + Math.PI; // Opposite direction
+      const safeDistance = PLATFORM_RADIUS * 0.4;
+      set({ 
+        npcTarget: [
+          npcPosition[0] + Math.cos(angle) * safeDistance,
+          0,
+          npcPosition[2] + Math.sin(angle) * safeDistance
+        ]
+      });
+    }
   },
   
   // Check for collision between player and NPC
@@ -309,7 +400,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         collisionTime: Date.now(),
         collisionPosition: collisionPoint,
         playerPosition: newPlayerPos,
-        npcPosition: newNpcPos
+        npcPosition: newNpcPos,
+        currentSpeed: 0 // Reset player speed on collision
       });
       
       // Reset collision state after animation duration
