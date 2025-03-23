@@ -84,8 +84,8 @@ export default function Player({ position }: { position: [number, number, number
   const moveDirection = useGameStore((state) => state.moveDirection);
   const isStrafing = useGameStore((state) => state.isStrafing);
   const updatePosition = useGameStore((state) => state.updatePosition);
-  // State to track if we should show skeleton helper
-  const [showSkeleton, setShowSkeleton] = useState(true);
+  // Replace state with constant since setter is not used
+  const showSkeleton = true;
 
   // Scale the model to match our previous proportions
   scene.scale.set(0.7, 0.7, 0.7);
