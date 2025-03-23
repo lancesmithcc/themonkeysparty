@@ -73,6 +73,11 @@ canvas {
   }
 }
 
+/* Animation for the loading spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Mobile media queries */
 @media (max-width: 768px) {
   .spotify-container {
