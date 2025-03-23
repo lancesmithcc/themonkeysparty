@@ -22,7 +22,7 @@ export default function Stars() {
   const particleGeometry = new THREE.BufferGeometry();
   particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (starsRef.current) {
       // Animate stars
       const positions = starsRef.current.geometry.attributes.position.array as Float32Array;
