@@ -281,124 +281,157 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().checkCollision();
   },
   
-  // Update NPC position with Fibonacci pattern
+  // Update NPC position based on calculated path and allow for stops
   updateNpcPosition: () => {
-    const { 
-      npcPosition, 
-      npcTarget, 
-      npcWanderTimer, 
-      npcMoveDirection, 
-      isColliding,
-      npcFibStep,
-      npcFibDirection,
-      shouldNpcMove
-    } = get();
+    const state = get();
     
-    // No movement during collision animation or if movement is disabled
-    if (isColliding || !shouldNpcMove) return;
+    // Skip if collision or movement disabled
+    if (state.isColliding || !state.shouldNpcMove) return;
     
-    // Randomly decide if NPC should stop (2% chance per update)
-    if (Math.random() < 0.002) {
-      // Stop for a random period between 2-7 seconds
-      const stopDuration = 2000 + Math.random() * 5000;
-      
-      set({ shouldNpcMove: false });
-      
-      setTimeout(() => {
-        set({ shouldNpcMove: true });
-      }, stopDuration);
-      
-      return;
-    }
+    const now = Date.now();
+    let { npcWanderTimer, npcPosition, npcRotation, npcMoveDirection, npcFibStep, npcFibDirection } = state;
     
-    // Update wander timer and set new target if needed
-    const newTimer = npcWanderTimer - 1;
-    if (newTimer <= 0) {
-      // Use Fibonacci pattern for movement
-      const nextFibStep = (npcFibStep % 10) + 1; // Cycle through first 10 Fibonacci numbers
-      const fibValue = getFibonacciNumber(nextFibStep);
-      
-      // More significant direction changes for wider exploration
-      const nextDirection = (npcFibDirection + Math.PI * (0.3 + Math.random() * 0.7)) % (2 * Math.PI);
-      
-      set({ 
-        npcFibStep: nextFibStep,
-        npcFibDirection: nextDirection,
-        // Shorter timer for more frequent movement changes
-        npcWanderTimer: fibValue * 8 + 5 + Math.floor(Math.random() * 20) // Add randomness to timer
-      });
-      
-      get().setNewNpcTarget();
-      return;
-    }
+    // Get next Fibonacci value (for variable timing)
+    const fibValue = getFibonacciNumber(state.npcFibStep);
     
-    // Calculate direction to target
-    const targetVector = new THREE.Vector3(
-      npcTarget[0] - npcPosition[0],
-      0,
-      npcTarget[2] - npcPosition[2]
-    );
-    
-    // If close to target, set a new target more quickly
-    const distanceToTarget = targetVector.length();
-    if (distanceToTarget < 0.1) { // Very short threshold to change targets
-      set({ 
-        npcMoveDirection: new THREE.Vector3(0, 0, 0),
-        // Very short pause at destination with randomized duration
-        npcWanderTimer: 5 + Math.floor(Math.random() * 30)
-      });
-      // 40% chance to immediately pick a new target
-      if (Math.random() < 0.4) {
-        get().setNewNpcTarget();
+    // Check if it's time to stop/change direction
+    if (now > npcWanderTimer) {
+      // 30% chance to stop for a while
+      if (Math.random() < 0.3) {
+        // Longer pause when stopping (using Fibonacci for varied timing)
+        const pauseDuration = fibValue * 100 + 1000;
+        console.log(`NPC pausing for ${pauseDuration}ms`);
+        
+        set({
+          npcWanderTimer: now + pauseDuration,
+          shouldNpcMove: false
+        });
+        
+        // Set a timeout to resume movement
+        setTimeout(() => {
+          set({ shouldNpcMove: true });
+        }, pauseDuration);
+        
+        return;
       }
-      return;
+      
+      // Otherwise, change direction more frequently
+      const newDirection = new THREE.Vector3();
+      
+      // 85% chance of slight direction change, 15% chance of major change
+      if (Math.random() < 0.85) {
+        // Get current direction and add some randomness
+        newDirection.copy(npcMoveDirection);
+        
+        // Add jitter - random angle between -45 and 45 degrees
+        const angle = (Math.random() - 0.5) * Math.PI / 2;
+        newDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+      } else {
+        // Completely new random direction
+        newDirection.set(
+          Math.random() * 2 - 1,
+          0,
+          Math.random() * 2 - 1
+        ).normalize();
+      }
+      
+      // Update Fibonacci pattern step
+      const newFibStep = state.npcFibStep + state.npcFibDirection;
+      
+      // Reverse direction if we reach limits
+      let newFibDirection = state.npcFibDirection;
+      if (newFibStep > 10 || newFibStep < 1) {
+        newFibDirection = -newFibDirection;
+      }
+      
+      // Random timer between 300ms and 1000ms + Fibonacci scaling
+      const dirChangeDelay = Math.random() * 700 + 300 + fibValue * 8;
+      
+      set({
+        npcMoveDirection: newDirection,
+        npcWanderTimer: now + dirChangeDelay,
+        npcFibStep: newFibStep,
+        npcFibDirection: newFibDirection
+      });
     }
     
-    // Update direction with slight random deviation
-    targetVector.normalize();
-    // Add some random drift to movement direction (5% deviation)
-    const randomDrift = new THREE.Vector3(
-      (Math.random() - 0.5) * 0.1,
-      0,
-      (Math.random() - 0.5) * 0.1
-    );
-    targetVector.add(randomDrift).normalize();
-    
-    set({ npcMoveDirection: targetVector });
-    
-    // Move towards target with variable speed
-    const speedVariation = 0.7 + Math.random() * 0.6; // 70% to 130% of base speed
-    const speed = MOVEMENT_SPEED * speedVariation;
-    
-    const newX = npcPosition[0] + targetVector.x * speed;
-    const newZ = npcPosition[2] + targetVector.z * speed;
-    
-    // Check if new position is within bounds
-    if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
-      set({ 
-        npcPosition: [newX, npcPosition[1], newZ],
-        npcRotation: [0, Math.atan2(targetVector.x, targetVector.z), 0],
-        npcWanderTimer: newTimer
+    // Only move if we should move
+    if (state.shouldNpcMove) {
+      // Vary the speed slightly for more natural movement
+      const speed = 0.02 + (Math.random() * 0.01);
+      
+      // Calculate new position
+      const newPosition: [number, number, number] = [...npcPosition];
+      newPosition[0] += npcMoveDirection.x * speed;
+      newPosition[2] += npcMoveDirection.z * speed;
+      
+      // Ensure NPC stays within platform bounds
+      const distance = Math.sqrt(newPosition[0] * newPosition[0] + newPosition[2] * newPosition[2]);
+      if (distance > 9.5) {
+        // Bounce off the edge with a bit of randomness
+        npcMoveDirection.reflect(new THREE.Vector3(newPosition[0], 0, newPosition[2]).normalize());
+        
+        // Add slight random deviation after bounce
+        const bounceAngle = (Math.random() - 0.5) * Math.PI / 6;
+        npcMoveDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), bounceAngle);
+        
+        // Recalculate position to stay in bounds
+        newPosition[0] = npcPosition[0] + npcMoveDirection.x * speed;
+        newPosition[2] = npcPosition[2] + npcMoveDirection.z * speed;
+      }
+      
+      // Calculate rotation to face movement direction
+      const targetRotation = Math.atan2(npcMoveDirection.x, npcMoveDirection.z);
+      
+      // Smooth rotation
+      const rotationSpeed = 0.1;
+      let newRotation = npcRotation[1];
+      
+      // Calculate the shortest angle difference
+      let rotDiff = targetRotation - newRotation;
+      if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+      if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+      
+      // Apply smooth rotation
+      newRotation += rotDiff * rotationSpeed;
+      
+      set({
+        npcPosition: newPosition,
+        npcRotation: [0, newRotation, 0] as [number, number, number],
+        isPlayerMoving: true
       });
     } else {
-      // If outside bounds, get a new target
-      get().setNewNpcTarget();
+      // If not moving, make sure isPlayerMoving is false for correct animation
+      set({ isPlayerMoving: false });
     }
-    
-    // Check for collision with player
-    get().checkCollision();
   },
   
-  // Set a new target for the NPC with more randomness
+  // Set a new target for the NPC based on Fibonacci pattern
   setNewNpcTarget: () => {
     const { npcFibStep, npcFibDirection, npcPosition } = get();
     
-    // 20% chance to aim for a completely random point
-    if (Math.random() < 0.2) {
+    // Use Fibonacci number to determine distance but scale up for longer paths
+    const fibNumber = getFibonacciNumber(npcFibStep);
+    const normalizedFib = fibNumber / 10; // Scale down to reasonable values
+    
+    // Increase distance to encourage exploration of the entire platform
+    // Use 85-100% of the platform radius for wider coverage
+    const distance = PLATFORM_RADIUS * (0.85 + Math.random() * 0.15);
+    
+    // Add more randomness to the direction for unpredictable movement
+    const randomOffset = (Math.random() - 0.5) * Math.PI / 2; // ±45 degrees randomness (increased)
+    const direction = npcFibDirection + randomOffset;
+    
+    // Calculate new target position using the direction
+    const newX = Math.cos(direction) * distance;
+    const newZ = Math.sin(direction) * distance;
+    
+    // 15% chance to aim for a completely random point on the platform
+    if (Math.random() < 0.15) {
       // Generate a random angle
       const randomAngle = Math.random() * Math.PI * 2; 
-      // Random distance from 30-100% of platform radius
-      const randomDistance = PLATFORM_RADIUS * (0.3 + Math.random() * 0.7);
+      // Random distance from 50-100% of platform radius
+      const randomDistance = PLATFORM_RADIUS * (0.5 + Math.random() * 0.5);
       
       const randomX = Math.cos(randomAngle) * randomDistance;
       const randomZ = Math.sin(randomAngle) * randomDistance;
@@ -409,22 +442,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         return;
       }
     }
-    
-    // Use Fibonacci number to determine distance but with more randomness
-    const fibNumber = getFibonacciNumber(npcFibStep);
-    const normalizedFib = fibNumber / 10; // Scale down to reasonable values
-    
-    // Wide range of distances
-    const distanceVariation = 0.5 + Math.random() * 0.5; // 50% to 100% of max distance
-    const distance = PLATFORM_RADIUS * distanceVariation;
-    
-    // Add randomness to the direction
-    const randomOffset = (Math.random() - 0.5) * Math.PI; // ±90 degrees randomness
-    const direction = npcFibDirection + randomOffset;
-    
-    // Calculate new target position using the direction
-    const newX = Math.cos(direction) * distance;
-    const newZ = Math.sin(direction) * distance;
     
     // Ensure target is within platform bounds
     if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
@@ -446,39 +463,27 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Check for collision between player and NPC
   checkCollision: () => {
-    const { 
-      playerPosition, 
-      npcPosition, 
-      secondNpcPosition, 
-      isColliding, 
-      collisionTime 
-    } = get();
+    const { playerPosition, npcPosition, isColliding, collisionTime } = get();
     
-    // First check for collision with the main NPC
-    const dx1 = npcPosition[0] - playerPosition[0];
-    const dz1 = npcPosition[2] - playerPosition[2];
-    const distance1 = Math.sqrt(dx1 * dx1 + dz1 * dz1);
+    // Calculate distance between player and NPC
+    const dx = npcPosition[0] - playerPosition[0];
+    const dz = npcPosition[2] - playerPosition[2];
+    const distance = Math.sqrt(dx * dx + dz * dz);
     
-    // Then check for collision with the second NPC
-    const dx2 = secondNpcPosition[0] - playerPosition[0];
-    const dz2 = secondNpcPosition[2] - playerPosition[2];
-    const distance2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+    console.log("Distance between player and NPC:", distance);
     
-    // Debug distances
-    // console.log("Distance to NPC1:", distance1, "Distance to NPC2:", distance2);
-    
-    // Collision with main NPC
-    if (distance1 < COLLISION_DISTANCE && !isColliding) {
-      console.log("Collision with main NPC!");
+    // If collision detected and not already in collision state
+    if (distance < COLLISION_DISTANCE && !isColliding) {
+      console.log("Collision detected!");
       
-      // Calculate the collision point
+      // Calculate the collision point (slightly above the ground for better visibility)
       const collisionX = (playerPosition[0] + npcPosition[0]) / 2;
       const collisionY = 0.3; // Raised up for better visibility
       const collisionZ = (playerPosition[2] + npcPosition[2]) / 2;
       
       // Calculate normalized direction vectors for knockback
-      const playerNormDx = dx1 / distance1;
-      const playerNormDz = dz1 / distance1;
+      const playerNormDx = dx / distance;
+      const playerNormDz = dz / distance;
       
       // Apply knockback to player position (away from NPC)
       const newPlayerX = playerPosition[0] - playerNormDx * KNOCKBACK_FORCE;
@@ -488,12 +493,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       const newNpcX = npcPosition[0] + playerNormDx * KNOCKBACK_FORCE;
       const newNpcZ = npcPosition[2] + playerNormDz * KNOCKBACK_FORCE;
       
-      // Set a timeout to resume movement after collision
+      // Set a timeout to resume NPC movement after collision
       setTimeout(() => {
         set({ 
           isColliding: false,
-          shouldNpcMove: true,
-          shouldSecondNpcMove: true
+          shouldNpcMove: true
         });
       }, COLLISION_DURATION);
       
@@ -506,56 +510,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         npcPosition: [newNpcX, npcPosition[1], newNpcZ],
         currentSpeed: 0 // Reset player speed on collision
       });
-      
-      return;
-    }
-    
-    // Collision with second NPC
-    if (distance2 < COLLISION_DISTANCE && !isColliding) {
-      console.log("Collision with second NPC!");
-      
-      // Calculate the collision point
-      const collisionX = (playerPosition[0] + secondNpcPosition[0]) / 2;
-      const collisionY = 0.3; // Raised up for better visibility
-      const collisionZ = (playerPosition[2] + secondNpcPosition[2]) / 2;
-      
-      // Calculate normalized direction vectors for knockback
-      const playerNormDx = dx2 / distance2;
-      const playerNormDz = dz2 / distance2;
-      
-      // Apply knockback to player position (away from NPC)
-      const newPlayerX = playerPosition[0] - playerNormDx * KNOCKBACK_FORCE;
-      const newPlayerZ = playerPosition[2] - playerNormDz * KNOCKBACK_FORCE;
-      
-      // Apply knockback to NPC position (away from player)
-      const newNpcX = secondNpcPosition[0] + playerNormDx * KNOCKBACK_FORCE;
-      const newNpcZ = secondNpcPosition[2] + playerNormDz * KNOCKBACK_FORCE;
-      
-      // Set a timeout to resume movement after collision
-      setTimeout(() => {
-        set({ 
-          isColliding: false,
-          shouldNpcMove: true,
-          shouldSecondNpcMove: true
-        });
-      }, COLLISION_DURATION);
-      
-      // Return updated state with collision information
-      set({
-        isColliding: true,
-        collisionPosition: [collisionX, collisionY, collisionZ],
-        collisionTime: Date.now(),
-        playerPosition: [newPlayerX, playerPosition[1], newPlayerZ],
-        secondNpcPosition: [newNpcX, secondNpcPosition[1], newNpcZ],
-        currentSpeed: 0 // Reset player speed on collision
-      });
-      
-      return;
     }
     
     // If no longer in collision range but still in collision state
-    if ((distance1 >= COLLISION_DISTANCE && distance2 >= COLLISION_DISTANCE) && 
-        isColliding && Date.now() - collisionTime >= COLLISION_DURATION) {
+    if (distance >= COLLISION_DISTANCE && isColliding && 
+        Date.now() - collisionTime >= COLLISION_DURATION) {
       set({
         isColliding: false
       });
@@ -571,78 +530,92 @@ export const useGameStore = create<GameState>((set, get) => ({
   secondNpcWanderTimer: 0,
   shouldSecondNpcMove: true,
   
-  // Second NPC movement functions 
+  // Second NPC movement functions with more natural, random movement
   updateSecondNpcPosition: () => {
-    set((state) => {
-      // No movement during collision
-      if (state.isColliding) return state;
-      
-      // Randomly decide if NPC should stop (5% chance per update)
-      if (state.shouldSecondNpcMove && Math.random() < 0.002) {
-        // Stop for a random period between 3-8 seconds
-        const stopDuration = 3000 + Math.random() * 5000;
+    const state = get();
+    
+    // Skip if collision
+    if (state.isColliding) return;
+    
+    const now = Date.now();
+    
+    // Check if it's time to change behavior
+    if (now > state.secondNpcWanderTimer) {
+      // 30% chance to stop for a while
+      if (Math.random() < 0.3) {
+        // Pause for 2-5 seconds
+        const pauseDuration = Math.random() * 3000 + 2000;
+        console.log(`Second NPC pausing for ${pauseDuration}ms`);
         
+        // Set timer and temporarily disable movement
+        set({
+          secondNpcWanderTimer: now + pauseDuration,
+          shouldSecondNpcMove: false
+        });
+        
+        // Set a timeout to resume movement
         setTimeout(() => {
           set({ shouldSecondNpcMove: true });
-        }, stopDuration);
+        }, pauseDuration);
         
-        return {
-          ...state,
-          shouldSecondNpcMove: false
-        };
+        return;
       }
       
-      // If NPC is stopped, maintain position
-      if (!state.shouldSecondNpcMove) {
-        return state;
-      }
+      // Random direction with preference for forward movement
+      const angle = Math.random() * Math.PI * 2;
+      const direction = new THREE.Vector3(
+        Math.sin(angle),
+        0,
+        Math.cos(angle)
+      ).normalize();
       
-      // Add random direction changes (10% chance)
-      const shouldChangeDirection = Math.random() < 0.01;
+      // Random speed between 0.01 and 0.03
+      const speed = 0.01 + Math.random() * 0.02;
       
-      if (shouldChangeDirection) {
-        // Pick a completely random point on the platform
-        const randomAngle = Math.random() * Math.PI * 2;
-        // Use varying distance from center for more randomness
-        const randomDistance = PLATFORM_RADIUS * (0.3 + Math.random() * 0.6);
+      // New behavior change in 1-3 seconds
+      const nextChange = Math.random() * 2000 + 1000;
+      
+      set({
+        secondNpcMoveDirection: direction,
+        secondNpcWanderTimer: now + nextChange,
+        shouldSecondNpcMove: true
+      });
+    }
+    
+    // Only move if we're in a moving state
+    if (state.shouldSecondNpcMove) {
+      const { secondNpcPosition, secondNpcMoveDirection } = state;
+      
+      // Calculate new position
+      const newPosition: [number, number, number] = [...secondNpcPosition];
+      newPosition[0] += secondNpcMoveDirection.x * speed;
+      newPosition[2] += secondNpcMoveDirection.z * speed;
+      
+      // Check if within bounds
+      const distance = Math.sqrt(newPosition[0] * newPosition[0] + newPosition[2] * newPosition[2]);
+      if (distance > 9.5) {
+        // Bounce off edge with randomness
+        const bounceDirection = new THREE.Vector3(
+          -secondNpcMoveDirection.x + (Math.random() * 0.4 - 0.2),
+          0,
+          -secondNpcMoveDirection.z + (Math.random() * 0.4 - 0.2)
+        ).normalize();
         
-        return {
-          ...state,
-          secondNpcPosition: [
-            Math.sin(randomAngle) * randomDistance, 
-            0, 
-            Math.cos(randomAngle) * randomDistance
-          ],
-          secondNpcRotation: [
-            0,
-            Math.atan2(Math.sin(randomAngle), Math.cos(randomAngle)),
-            0
-          ]
-        };
+        // Set new direction and recalculate position
+        set({ secondNpcMoveDirection: bounceDirection });
+        
+        newPosition[0] = secondNpcPosition[0] + bounceDirection.x * speed;
+        newPosition[2] = secondNpcPosition[2] + bounceDirection.z * speed;
       }
       
-      // Current time-based movement but with some randomness added
-      const now = Date.now();
-      const noiseX = Math.sin(now * 0.001 + 42) * 0.3; // Add some noise to x
-      const noiseZ = Math.cos(now * 0.00073 + 17) * 0.3; // Different frequency for z
+      // Calculate rotation to face movement direction
+      const targetRotation = Math.atan2(secondNpcMoveDirection.x, secondNpcMoveDirection.z);
       
-      return {
-        ...state,
-        secondNpcPosition: [
-          Math.sin(now * 0.0003) * 2.5 + noiseX,
-          0,
-          Math.cos(now * 0.0004) * 2.5 + noiseZ
-        ],
-        secondNpcRotation: [
-          0,
-          Math.atan2(
-            Math.cos(now * 0.0003) * 0.0003 + Math.cos(now * 0.001) * 0.0001,
-            -Math.sin(now * 0.0004) * 0.0004 - Math.sin(now * 0.00073) * 0.0001
-          ),
-          0
-        ]
-      };
-    });
+      set({
+        secondNpcPosition: newPosition,
+        secondNpcRotation: [0, targetRotation, 0] as [number, number, number]
+      });
+    }
   },
   
   // Set new target for second NPC

@@ -1,97 +1,131 @@
-import React, { useEffect, useRef } from 'react';
-import * as THREE from 'three';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera, Stats } from '@react-three/drei';
+import { useEffect, Suspense } from 'react';
+import Room from './Room';
+import Player from './Player';
+import Npc from './Npc';
+import SecondNpc from './SecondNpc';
+import CollisionEffect from './CollisionEffect';
+import MobileControls from './MobileControls';
+import { useGameStore } from '../store/gameStore';
+import { KeyboardControls } from '@react-three/drei';
+import GeometricShapes from './GeometricShapes';
+
+// Simple fallback component for loading
+function SimpleLoading() {
+  return null;
+}
 
 export default function Game() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // State to detect mobile devices
+  const isMobile = useGameStore(state => state.isMobile);
+  const setIsMobile = useGameStore(state => state.setIsMobile);
+  const position = useGameStore(state => state.playerPosition);
+  const handleKeyDown = useGameStore(state => state.handleKeyDown);
+  const handleKeyUp = useGameStore(state => state.handleKeyUp);
+  
+  // Map keyboard controls to game actions
+  const keyMap = [
+    { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
+    { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
+    { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
+    { name: 'right', keys: ['ArrowRight', 'KeyD'] },
+    { name: 'jump', keys: ['Space'] }
+  ];
 
+  // Add direct keyboard event listeners to ensure controls work
   useEffect(() => {
-    if (!containerRef.current) return;
+    console.log("Setting up keyboard event listeners");
+    
+    // Add event listeners for key presses
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    // Remove event listeners when component unmounts
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleKeyDown, handleKeyUp]);
 
-    // Create a scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xff00ff); // Bright purple background
+  // Mobile detection
+  useEffect(() => {
+    // Simple mobile detection
+    const checkMobile = () => {
+      return (
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent
+        ) || window.innerWidth < 768
+      );
+    };
 
-    // Create a camera
-    const camera = new THREE.PerspectiveCamera(
-      75, 
-      window.innerWidth / window.innerHeight, 
-      0.1, 
-      1000
-    );
-    camera.position.z = 5;
+    setIsMobile(checkMobile());
 
-    // Create a renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    containerRef.current.appendChild(renderer.domElement);
-
-    // Add very bright lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-    directionalLight.position.set(1, 1, 1);
-    scene.add(directionalLight);
-
-    // Create a visible cube
-    const geometry = new THREE.BoxGeometry(2, 2, 2);
-    const material = new THREE.MeshStandardMaterial({ 
-      color: 0x00ff00, 
-      emissive: 0x00ff00,
-      emissiveIntensity: 0.5
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
-
-    // Handle window resize
+    // Update on resize
     const handleResize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      
-      renderer.setSize(width, height);
+      setIsMobile(checkMobile());
     };
 
     window.addEventListener('resize', handleResize);
-
-    // Animation loop
-    const animate = () => {
-      requestAnimationFrame(animate);
-      
-      // Rotate the cube
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
-      
-      renderer.render(scene, camera);
-    };
-
-    animate();
-
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      
-      // Clean up WebGL resources
-      if (containerRef.current) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
-      
-      geometry.dispose();
-      material.dispose();
-      renderer.dispose();
     };
-  }, []);
+  }, [setIsMobile]);
+
+  // CSS classes with conditional mobile adjustments
+  const gameContainerClasses = `game-container w-full h-full ${
+    isMobile ? 'touch-manipulation' : ''
+  }`;
 
   return (
-    <div 
-      ref={containerRef} 
-      style={{ 
-        width: '100%', 
-        height: '100%', 
-        background: 'red' 
-      }}
-    />
+    <div className={gameContainerClasses}>
+      <KeyboardControls
+        map={keyMap}
+      >
+        <Canvas shadows style={{ width: '100%', height: '100%' }}>
+          {/* Debug stats - comment out in production */}
+          {/* <Stats /> */}
+          
+          {/* Set scene background color to black */}
+          <color attach="background" args={["#000000"]} />
+          <fog attach="fog" color="#000000" near={1} far={50} />
+          
+          <PerspectiveCamera makeDefault position={[0, 5, 5]} />
+          <OrbitControls 
+            target={[0, 0, 0]}
+            maxPolarAngle={Math.PI / 2}
+            enableZoom={true}
+            minDistance={2}
+            maxDistance={15}
+            zoomSpeed={1}
+          />
+          
+          {/* Increased ambient light */}
+          <ambientLight intensity={0.5} />
+          
+          {/* Added point light above character */}
+          <pointLight position={[10, 10, 10]} intensity={1.5} />
+          
+          {/* Directional light for general illumination */}
+          <directionalLight
+            position={[5, 5, 5]}
+            intensity={0.8}
+            castShadow
+            shadow-mapSize={[2048, 2048]}
+          />
+          
+          <Suspense fallback={<SimpleLoading />}>
+            <Room />
+            <GeometricShapes />
+            <Player position={position} />
+            <Npc />
+            <SecondNpc />
+            <CollisionEffect />
+          </Suspense>
+        </Canvas>
+      </KeyboardControls>
+      
+      {isMobile && <MobileControls />}
+    </div>
   );
 }
