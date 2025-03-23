@@ -269,11 +269,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       npcMoveDirection, 
       isColliding,
       npcFibStep,
-      npcFibDirection
+      npcFibDirection,
+      shouldNpcMove
     } = get();
     
-    // No movement during collision animation
-    if (isColliding) return;
+    // No movement during collision animation or if movement is disabled
+    if (isColliding || !shouldNpcMove) return;
     
     // Update wander timer and set new target if needed
     const newTimer = npcWanderTimer - 1;
@@ -282,13 +283,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextFibStep = (npcFibStep % 10) + 1; // Cycle through first 10 Fibonacci numbers
       const fibValue = getFibonacciNumber(nextFibStep);
       
-      // Increment direction more frequently for more active movement
-      const nextDirection = (npcFibDirection + Math.PI / 3) % (2 * Math.PI);
+      // More significant direction changes for wider exploration
+      const nextDirection = (npcFibDirection + Math.PI * (0.3 + Math.random() * 0.7)) % (2 * Math.PI);
       
       set({ 
         npcFibStep: nextFibStep,
         npcFibDirection: nextDirection,
-        npcWanderTimer: fibValue * 15 + 10 // Scale Fibonacci number for shorter timer (more movement)
+        // Shorter timer for more frequent movement changes
+        npcWanderTimer: fibValue * 8 + 5 
       });
       
       get().setNewNpcTarget();
@@ -304,14 +306,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     
     // If close to target, set a new target more quickly
     const distanceToTarget = targetVector.length();
-    if (distanceToTarget < 0.1) { // Reduced threshold to change targets more often
+    if (distanceToTarget < 0.1) { // Very short threshold to change targets
       set({ 
         npcMoveDirection: new THREE.Vector3(0, 0, 0),
-        // Shorter pause at destination
-        npcWanderTimer: 10 + Math.random() * 20
+        // Very short pause at destination
+        npcWanderTimer: 5 + Math.random() * 10
       });
-      // 20% chance to immediately pick a new target
-      if (Math.random() < 0.2) {
+      // 40% chance to immediately pick a new target (increased from 20%)
+      if (Math.random() < 0.4) {
         get().setNewNpcTarget();
       }
       return;
@@ -322,7 +324,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ npcMoveDirection: targetVector });
     
     // Move towards target with faster speed
-    const speed = MOVEMENT_SPEED * (1.2 + Math.sin(Date.now() * 0.001) * 0.3); // Faster base movement
+    const speed = MOVEMENT_SPEED * (1.5 + Math.sin(Date.now() * 0.001) * 0.5); // Faster base movement
     
     const newX = npcPosition[0] + targetVector.x * speed;
     const newZ = npcPosition[2] + targetVector.z * speed;
@@ -346,23 +348,44 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Use Fibonacci number to determine distance but scale up for longer paths
     const fibNumber = getFibonacciNumber(npcFibStep);
     const normalizedFib = fibNumber / 10; // Scale down to reasonable values
-    const distance = PLATFORM_RADIUS * 0.6 * Math.min(normalizedFib + 0.3, 0.9); // More distance, cap at 90% of radius
     
-    // Add some randomness to the direction for less predictable patterns
-    const randomOffset = (Math.random() - 0.5) * Math.PI / 4; // ±22.5 degrees randomness
+    // Increase distance to encourage exploration of the entire platform
+    // Use 85-100% of the platform radius for wider coverage
+    const distance = PLATFORM_RADIUS * (0.85 + Math.random() * 0.15);
+    
+    // Add more randomness to the direction for unpredictable movement
+    const randomOffset = (Math.random() - 0.5) * Math.PI / 2; // ±45 degrees randomness (increased)
     const direction = npcFibDirection + randomOffset;
     
     // Calculate new target position using the direction
     const newX = Math.cos(direction) * distance;
     const newZ = Math.sin(direction) * distance;
     
+    // 15% chance to aim for a completely random point on the platform
+    if (Math.random() < 0.15) {
+      // Generate a random angle
+      const randomAngle = Math.random() * Math.PI * 2; 
+      // Random distance from 50-100% of platform radius
+      const randomDistance = PLATFORM_RADIUS * (0.5 + Math.random() * 0.5);
+      
+      const randomX = Math.cos(randomAngle) * randomDistance;
+      const randomZ = Math.sin(randomAngle) * randomDistance;
+      
+      // Ensure target is within platform bounds
+      if (isWithinHexagon(randomX, randomZ, PLATFORM_RADIUS)) {
+        set({ npcTarget: [randomX, 0, randomZ] });
+        return;
+      }
+    }
+    
     // Ensure target is within platform bounds
     if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
       set({ npcTarget: [newX, 0, newZ] });
     } else {
-      // If outside bounds, pick a point toward center
-      const angle = Math.atan2(npcPosition[2], npcPosition[0]) + Math.PI; // Opposite direction
-      const safeDistance = PLATFORM_RADIUS * 0.5;
+      // If outside bounds, pick a point toward an edge
+      // Find the closest point on the hexagon edge
+      const angle = Math.atan2(newZ, newX);
+      const safeDistance = PLATFORM_RADIUS * 0.95; // Very close to edge
       set({ 
         npcTarget: [
           Math.cos(angle) * safeDistance,
