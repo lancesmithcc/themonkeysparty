@@ -44,12 +44,22 @@ export default function CollisionEffect() {
     collisionTime: state.collisionTime
   }));
   
+  // Debug logging for collision state
+  useEffect(() => {
+    if (isColliding) {
+      console.log("Collision effect activated:", {
+        position: collisionPosition,
+        time: collisionTime
+      });
+    }
+  }, [isColliding, collisionPosition, collisionTime]);
+  
   // Refs for particles
   const particlesRef = useRef<THREE.Points>(null);
   const glowRef = useRef<THREE.Sprite>(null);
   
   // Particle count and properties
-  const PARTICLE_COUNT = 200;
+  const PARTICLE_COUNT = 300; // Increased particle count for better effect
   
   // Create particles with random velocities and lifetimes
   const particles = useMemo(() => {

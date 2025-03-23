@@ -78,10 +78,11 @@ export default function Npc() {
   const { scene, animations } = useGLTF(MODEL_URL);
   const { actions } = useAnimations(animations, ref);
   
-  // Get NPC position and movement data from the store
-  const npcPosition = useGameStore((state) => state.npcPosition);
-  const npcMoveDirection = useGameStore((state) => state.npcMoveDirection);
-  const updateNpcPosition = useGameStore((state) => state.updateNpcPosition);
+  const { npcPosition, npcRotation, updateNpcPosition } = useGameStore(state => ({
+    npcPosition: state.npcPosition,
+    npcRotation: state.npcRotation,
+    updateNpcPosition: state.updateNpcPosition
+  }));
 
   // Clone the scene to avoid conflicts with Player component
   const npcScene = useMemo(() => scene.clone(), [scene]);
@@ -101,13 +102,21 @@ export default function Npc() {
     console.log("NPC available animations:", Object.keys(actions));
   }, []);
 
+  // Helper to check if there's rotation (for animation triggering)
+  const isMoving = useMemo(() => {
+    // Check if any rotation component is non-zero
+    return Math.abs(npcRotation[0]) > 0.01 || 
+           Math.abs(npcRotation[1]) > 0.01 || 
+           Math.abs(npcRotation[2]) > 0.01;
+  }, [npcRotation]);
+
   // Handle animations based on movement
   useEffect(() => {
     // Reset all animations
     Object.values(actions).forEach(action => action?.stop());
 
     // Play animation based on whether NPC is moving
-    if (npcMoveDirection.length() > 0) {
+    if (isMoving) {
       // Get all available animations
       const availableAnims = Object.keys(actions);
       
@@ -151,20 +160,29 @@ export default function Npc() {
         actions[firstAnim]?.play();
       }
     }
-  }, [actions, npcMoveDirection.length()]);
+  }, [actions, isMoving]);
 
   // Animation and movement in each frame
   useFrame((state) => {
+    // Update NPC position through the store
+    updateNpcPosition();
+    
+    // Ensure reference exists
     if (!ref.current) return;
+    
+    // Apply position from store
+    ref.current.position.set(npcPosition[0], npcPosition[1], npcPosition[2]);
+    
+    // Apply rotation from store if provided
+    if (npcRotation) {
+      ref.current.rotation.set(npcRotation[0], npcRotation[1], npcRotation[2]);
+    }
     
     // Update aura time uniform
     if (auraRef.current) {
       const material = auraRef.current.material as THREE.ShaderMaterial;
       material.uniforms.time.value = state.clock.getElapsedTime();
     }
-    
-    // Update NPC position using the gameStore function
-    updateNpcPosition();
     
     // Manual bone animation for limbs if available
     const time = state.clock.getElapsedTime();
@@ -174,7 +192,7 @@ export default function Npc() {
         const name = object.name.toLowerCase();
         
         // Animated limbs for movement
-        if (npcMoveDirection.length() > 0) {
+        if (isMoving) {
           // Arms
           if (name.includes('arm') || name.includes('hand')) {
             // Swing arms back and forth
@@ -205,7 +223,7 @@ export default function Npc() {
     });
     
     // Update visual position and animation effects
-    if (npcMoveDirection.length() > 0) {
+    if (isMoving) {
       // Movement animation
       const bobHeight = Math.sin(time * 8) * 0.08;
       
@@ -216,8 +234,8 @@ export default function Npc() {
         npcPosition[2]
       );
       
-      // Rotate NPC to face movement direction
-      const angle = Math.atan2(npcMoveDirection.x, npcMoveDirection.z);
+      // Rotate NPC to face movement direction (using y rotation)
+      const angle = Math.atan2(npcRotation[0], npcRotation[2]);
       
       // Smooth rotation transition
       ref.current.rotation.y = THREE.MathUtils.lerp(
