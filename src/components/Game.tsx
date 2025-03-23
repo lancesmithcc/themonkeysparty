@@ -66,8 +66,8 @@ export default function Game() {
         map={keyMap}
       >
         <Canvas shadows style={{ width: '100%', height: '100%' }}>
-          {/* Debug stats - comment out in production */}
-          {/* <Stats /> */}
+          {/* Debug stats - uncomment to see performance */}
+          <Stats />
           
           {/* Set scene background color to black */}
           <color attach="background" args={["#000000"]} />
@@ -84,20 +84,21 @@ export default function Game() {
           />
           
           {/* Increased ambient light */}
-          <ambientLight intensity={0.5} />
+          <ambientLight intensity={0.8} />
           
           {/* Added point light above character */}
-          <pointLight position={[10, 10, 10]} intensity={1.5} />
+          <pointLight position={[10, 10, 10]} intensity={1.8} />
           
           {/* Directional light for general illumination */}
           <directionalLight 
             position={[5, 5, 5]}
-            intensity={0.8}
+            intensity={1.0}
             castShadow
             shadow-mapSize={[2048, 2048]}
           />
           
           <Suspense fallback={<SimpleLoading />}>
+            <Stars />
             <Room />
             <GeometricShapes />
             <Player position={position} />

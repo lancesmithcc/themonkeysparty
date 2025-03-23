@@ -1,5 +1,4 @@
 import RetroTV from './RetroTV';
-import Stars from './Stars';
 import GeometricShapes from './GeometricShapes';
 import CrystalCluster from './CrystalCluster';
 import { useRef, useEffect } from 'react';
@@ -191,9 +190,6 @@ export default function Room() {
 
       {/* Crystal cluster underneath the platform */}
       <CrystalCluster />
-
-      {/* Cosmic environment */}
-      <Stars />
       
       {/* Geometric Shapes */}
       <GeometricShapes />
