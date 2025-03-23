@@ -3,10 +3,10 @@ import * as THREE from 'three';
 
 // Constants for platform bounds checking
 const PLATFORM_RADIUS = 4;
-const MOVEMENT_SPEED = 0.05; // Reduced base speed for smoother movement
-const MAX_SPEED = 0.1; // Maximum speed after acceleration
-const ACCELERATION = 0.005; // How quickly player reaches max speed
-const DECELERATION = 0.01; // How quickly player slows down
+const MOVEMENT_SPEED = 0.025; // Reduced base speed for smoother movement
+const MAX_SPEED = 0.05; // Maximum speed after acceleration
+const ACCELERATION = 0.0025; // How quickly player reaches max speed
+const DECELERATION = 0.005; // How quickly player slows down
 const COLLISION_DISTANCE = 0.8;
 const COLLISION_DURATION = 1500; // ms
 const COLLISION_KNOCKBACK = 0.5;

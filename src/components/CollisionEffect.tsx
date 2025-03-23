@@ -11,12 +11,19 @@ function createFallbackTexture() {
   const context = canvas.getContext('2d');
   
   if (context) {
-    // Create a radial gradient
+    // Clear with transparent background
+    context.clearRect(0, 0, 64, 64);
+    
+    // Create a soft, circular gradient for the particle
     const gradient = context.createRadialGradient(
-      32, 32, 0,
-      32, 32, 32
+      32, 32, 0,   // Inner circle center x, y, radius
+      32, 32, 32   // Outer circle center x, y, radius
     );
+    
+    // More defined gradient with soft edges
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     
     // Fill with gradient
@@ -25,6 +32,7 @@ function createFallbackTexture() {
   }
   
   const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -62,14 +70,14 @@ export default function CollisionEffect() {
     // Initialize particles with random positions, velocities, and colors
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       // Random initial position near the center
-      positions[i * 3] = (Math.random() - 0.5) * 0.1;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 0.1;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+      positions[i * 3] = (Math.random() - 0.5) * 0.05;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 0.05;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.05;
       
       // Random velocity in all directions
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
-      const speed = 1 + Math.random() * 2;
+      const speed = 0.5 + Math.random(); // Lower speed for smaller movements
       
       velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
       velocities[i * 3 + 1] = Math.cos(phi) * speed;
@@ -141,7 +149,7 @@ export default function CollisionEffect() {
           float timeSinceCollision = time - collisionTime;
           float fadeOut = 1.0 - min(1.0, timeSinceCollision / 1.5);
           
-          gl_PointSize = size * fadeOut * (300.0 / -mvPosition.z);
+          gl_PointSize = size * fadeOut * (100.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -152,7 +160,8 @@ export default function CollisionEffect() {
         void main() {
           vec2 uv = vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y);
           vec4 texColor = texture2D(texture, uv);
-          gl_FragColor = vec4(vColor, 1.0) * texColor;
+          if (texColor.a < 0.1) discard; // Discard nearly transparent pixels
+          gl_FragColor = vec4(vColor, texColor.a * 0.8);
         }
       `,
       blending: THREE.AdditiveBlending,
@@ -196,15 +205,15 @@ export default function CollisionEffect() {
         // Small random offset from collision point
         positions.setXYZ(
           i,
-          collisionPosition[0] + (Math.random() - 0.5) * 0.1,
-          collisionPosition[1] + (Math.random() - 0.5) * 0.1, 
-          collisionPosition[2] + (Math.random() - 0.5) * 0.1
+          collisionPosition[0] + (Math.random() - 0.5) * 0.05,
+          collisionPosition[1] + (Math.random() - 0.5) * 0.05, 
+          collisionPosition[2] + (Math.random() - 0.5) * 0.05
         );
         
         // New random velocity in all directions
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.random() * Math.PI;
-        const speed = 1 + Math.random() * 2;
+        const speed = 0.5 + Math.random(); // Consistent with initial setup
         
         velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
         velocities[i * 3 + 1] = Math.cos(phi) * speed;
@@ -239,18 +248,18 @@ export default function CollisionEffect() {
         let y = positions.getY(i);
         let z = positions.getZ(i);
         
-        // Add velocity and simulate gravity
-        x += particles.velocities[ix] * 0.01;
-        y += particles.velocities[iy] * 0.01 - 0.005; // Apply gravity
-        z += particles.velocities[iz] * 0.01;
+        // Add velocity and simulate gravity (slower movements)
+        x += particles.velocities[ix] * 0.007;
+        y += particles.velocities[iy] * 0.007 - 0.003; // Apply gentler gravity
+        z += particles.velocities[iz] * 0.007;
         
         // Update position
         positions.setXYZ(i, x, y, z);
         
-        // Optional: Slow down particles over time
-        particles.velocities[ix] *= 0.99;
-        particles.velocities[iy] *= 0.99;
-        particles.velocities[iz] *= 0.99;
+        // Slow down particles faster for more controlled effect
+        particles.velocities[ix] *= 0.97;
+        particles.velocities[iy] *= 0.97;
+        particles.velocities[iz] *= 0.97;
       }
       
       positions.needsUpdate = true;
