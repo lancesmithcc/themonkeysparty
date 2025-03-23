@@ -155,7 +155,7 @@ export default function Player({ position }: { position: [number, number, number
     }
   }, [actions, moveDirection.length()]);
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (!ref.current) return;
     
     // Update aura time uniform
