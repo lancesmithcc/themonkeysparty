@@ -3,6 +3,7 @@ import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei';
 import { useEffect, Suspense } from 'react';
 import Room from './Room';
 import Player from './Player';
+import Npc from './Npc';
 import MobileControls from './MobileControls';
 import { useGameStore } from '../store/gameStore';
 import * as THREE from 'three';
@@ -79,6 +80,7 @@ export default function Game() {
           
           <Room />
           <Player position={position} />
+          <Npc />
           
           {/* Mobile controls now rendered inside Canvas as HTML */}
           <Html fullscreen>
