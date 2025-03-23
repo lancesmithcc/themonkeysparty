@@ -1,11 +1,11 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 
-// Using the anuki model
-const MODEL_URL = '/models/anuki.glb';
+// Using the existing robob model as a fallback since anuki.glb doesn't exist
+const MODEL_URL = '/models/robob.glb';
 
 // Same aura shader as Player but with different color
 const auraShader = {
@@ -83,8 +83,13 @@ export default function Npc() {
   const npcMoveDirection = useGameStore((state) => state.npcMoveDirection);
   const updateNpcPosition = useGameStore((state) => state.updateNpcPosition);
 
+  // Clone the scene to avoid conflicts with Player component
+  const npcScene = useMemo(() => scene.clone(), [scene]);
+  
   // Scale the model appropriately
-  scene.scale.set(0.7, 0.7, 0.7);
+  useEffect(() => {
+    npcScene.scale.set(0.7, 0.7, 0.7);
+  }, [npcScene]);
 
   // Set initial rotation
   useEffect(() => {
@@ -245,7 +250,7 @@ export default function Npc() {
 
   return (
     <group ref={ref}>
-      <primitive object={scene} position={[0, 1, 0]} />
+      <primitive object={npcScene} position={[0, 1, 0]} />
       {/* Aura effect with different color than player */}
       <mesh
         ref={auraRef}
