@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store/gameStore';
 
 // Using the existing robob model as a fallback since anuki.glb doesn't exist
-const MODEL_URL = '/models/robob.glb';
+const MODEL_URL = '/models/anuki.glb';
 
 // Same aura shader as Player but with different color
 const auraShader = {
@@ -164,7 +164,7 @@ export default function Npc() {
     }
     
     // Update NPC position using the gameStore function
-    updateNpcPosition(delta);
+    updateNpcPosition();
     
     // Manual bone animation for limbs if available
     const time = state.clock.getElapsedTime();
