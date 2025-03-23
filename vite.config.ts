@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -12,8 +12,11 @@ export default defineConfig({
   base: '/',
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
+      'src': resolve(__dirname, 'src')
     }
+  },
+  css: {
+    postcss: './postcss.config.js'
   },
   // Ensure assets are properly handled
   build: {
@@ -22,7 +25,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        main: path.resolve(process.cwd(), 'index.html'),
+        main: resolve(__dirname, 'index.html'),
       },
       output: {
         manualChunks: {
