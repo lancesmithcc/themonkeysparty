@@ -79,6 +79,41 @@ export default function MobileControls() {
     setMoveDirection(new THREE.Vector3(0, 0, 0))
   }
   
+  // Setup for press-and-hold functionality
+  const buttonHoldInterval = useRef<number | null>(null)
+  
+  const startHoldingButton = (direction: string) => {
+    // First set immediately for responsive feel
+    handleButtonPress(direction)
+    
+    // Clear any existing interval
+    if (buttonHoldInterval.current) {
+      window.clearInterval(buttonHoldInterval.current)
+    }
+    
+    // Continue to apply movement while button is held
+    buttonHoldInterval.current = window.setInterval(() => {
+      handleButtonPress(direction)
+    }, 100) // Keep applying at short intervals
+  }
+  
+  const stopHoldingButton = () => {
+    if (buttonHoldInterval.current) {
+      window.clearInterval(buttonHoldInterval.current)
+      buttonHoldInterval.current = null
+    }
+    handleButtonRelease()
+  }
+  
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (buttonHoldInterval.current) {
+        window.clearInterval(buttonHoldInterval.current)
+      }
+    }
+  }, [])
+  
   useEffect(() => {
     if (!isMobile) return
     
@@ -163,7 +198,7 @@ export default function MobileControls() {
   if (!isMobile) return null
   
   // Common button styles
-  const buttonBase = "absolute w-14 h-14 flex items-center justify-center bg-gray-800 rounded-md border-2 active:bg-gray-700"
+  const buttonBase = "d-pad-button absolute w-14 h-14 flex items-center justify-center bg-gray-800 rounded-md border-2 active:bg-gray-700 select-none"
   const buttonActive = "bg-gray-700 border-red-500"
   const buttonInactive = "bg-gray-800 border-gray-600"
   
@@ -179,9 +214,13 @@ export default function MobileControls() {
           {/* Up button */}
           <button
             className={`${buttonBase} top-0 left-1/2 transform -translate-x-1/2 ${activeButton === 'up' ? buttonActive : buttonInactive}`}
-            onTouchStart={() => handleButtonPress('up')}
-            onTouchEnd={handleButtonRelease}
-            onTouchCancel={handleButtonRelease}
+            onTouchStart={() => startHoldingButton('up')}
+            onTouchEnd={stopHoldingButton}
+            onTouchCancel={stopHoldingButton}
+            onMouseDown={() => startHoldingButton('up')}
+            onMouseUp={stopHoldingButton}
+            onMouseLeave={stopHoldingButton}
+            onClick={() => {/* Prevent click handling since we're using mousedown/up */}}
           >
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -191,9 +230,13 @@ export default function MobileControls() {
           {/* Left button */}
           <button
             className={`${buttonBase} top-1/2 left-0 transform -translate-y-1/2 ${activeButton === 'left' ? buttonActive : buttonInactive}`}
-            onTouchStart={() => handleButtonPress('left')}
-            onTouchEnd={handleButtonRelease}
-            onTouchCancel={handleButtonRelease}
+            onTouchStart={() => startHoldingButton('left')}
+            onTouchEnd={stopHoldingButton}
+            onTouchCancel={stopHoldingButton}
+            onMouseDown={() => startHoldingButton('left')}
+            onMouseUp={stopHoldingButton}
+            onMouseLeave={stopHoldingButton}
+            onClick={() => {/* Prevent click handling since we're using mousedown/up */}}
           >
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -210,9 +253,13 @@ export default function MobileControls() {
           {/* Right button */}
           <button
             className={`${buttonBase} top-1/2 right-0 transform -translate-y-1/2 ${activeButton === 'right' ? buttonActive : buttonInactive}`}
-            onTouchStart={() => handleButtonPress('right')}
-            onTouchEnd={handleButtonRelease}
-            onTouchCancel={handleButtonRelease}
+            onTouchStart={() => startHoldingButton('right')}
+            onTouchEnd={stopHoldingButton}
+            onTouchCancel={stopHoldingButton}
+            onMouseDown={() => startHoldingButton('right')}
+            onMouseUp={stopHoldingButton}
+            onMouseLeave={stopHoldingButton}
+            onClick={() => {/* Prevent click handling since we're using mousedown/up */}}
           >
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -222,9 +269,13 @@ export default function MobileControls() {
           {/* Down button */}
           <button
             className={`${buttonBase} bottom-0 left-1/2 transform -translate-x-1/2 ${activeButton === 'down' ? buttonActive : buttonInactive}`}
-            onTouchStart={() => handleButtonPress('down')}
-            onTouchEnd={handleButtonRelease}
-            onTouchCancel={handleButtonRelease}
+            onTouchStart={() => startHoldingButton('down')}
+            onTouchEnd={stopHoldingButton}
+            onTouchCancel={stopHoldingButton}
+            onMouseDown={() => startHoldingButton('down')}
+            onMouseUp={stopHoldingButton}
+            onMouseLeave={stopHoldingButton}
+            onClick={() => {/* Prevent click handling since we're using mousedown/up */}}
           >
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
