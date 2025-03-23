@@ -72,11 +72,14 @@ export default function Game() {
           {/* Set scene background color to black */}
           <color attach="background" args={["#000000"]} />
           
-          <PerspectiveCamera makeDefault position={[0, 10, 10]} />
+          <PerspectiveCamera makeDefault position={[0, 5, 5]} />
           <OrbitControls
             target={[0, 0, 0]}
             maxPolarAngle={Math.PI / 2}
-            enableZoom={false}
+            enableZoom={true}
+            minDistance={2}
+            maxDistance={15}
+            zoomSpeed={1}
           />
           
           {/* Increased ambient light */}
