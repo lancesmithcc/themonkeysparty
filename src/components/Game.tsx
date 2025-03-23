@@ -59,7 +59,7 @@ export default function Game() {
   }, [handleKeyDown, handleKeyUp]);
 
   return (
-    <div className="game-container">
+    <div className="game-container w-full h-full">
       <KeyboardControls
         map={[
           { name: 'forward', keys: ['ArrowUp', 'w', 'W'] },
@@ -68,7 +68,7 @@ export default function Game() {
           { name: 'right', keys: ['ArrowRight', 'd', 'D'] },
         ]}
       >
-        <Canvas shadows>
+        <Canvas shadows style={{ width: '100%', height: '100%' }}>
           {/* Set scene background color to black */}
           <color attach="background" args={["#000000"]} />
           

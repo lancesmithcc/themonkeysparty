@@ -63,7 +63,7 @@ function App() {
   return (
     <div className="w-full h-screen overflow-hidden bg-black">
       {/* Game container */}
-      <div className="absolute inset-0 w-full h-full game-container">
+      <div className="w-full h-full">
         <Game />
       </div>
       
