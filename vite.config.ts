@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,5 +15,12 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(process.cwd(), 'index.html'),
+      },
+    },
   },
+  // Properly handle binary files like GLB models
+  assetsInclude: ['**/*.glb', '**/*.png'],
 });

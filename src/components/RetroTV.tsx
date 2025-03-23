@@ -4,8 +4,8 @@ import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 
 export default function RetroTV() {
-  const { scene } = useGLTF('./TV.glb');
-  const monkeboiTexture = useTexture('./monkeboi.png');
+  const { scene } = useGLTF('/models/TV.glb');
+  const monkeboiTexture = useTexture('/models/monkeboi.png');
   const tvRef = useRef(null);
   const floatingMonkeyRef = useRef<THREE.Mesh>(null);
   
@@ -127,4 +127,4 @@ export default function RetroTV() {
 }
 
 // Preload the model
-useGLTF.preload('./TV.glb');
+useGLTF.preload('/models/TV.glb');

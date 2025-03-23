@@ -12,7 +12,7 @@ export default function Room() {
   const playerPosition = useGameStore((state) => state.playerPosition);
   
   // Load the bonsai model
-  const { scene: bonsaiScene } = useGLTF('./bonsai.glb');
+  const { scene: bonsaiScene } = useGLTF('/models/bonsai.glb');
   
   // Scale the bonsai to be appropriate for the scene
   useEffect(() => {
@@ -204,4 +204,4 @@ export default function Room() {
 }
 
 // Preload the bonsai model
-useGLTF.preload('./bonsai.glb');
+useGLTF.preload('/models/bonsai.glb');

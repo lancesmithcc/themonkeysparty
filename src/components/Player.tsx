@@ -6,7 +6,7 @@ import { SkeletonHelper } from 'three';
 import { useGameStore } from '../store/gameStore';
 
 // Using our robob model with its own animations
-const MODEL_URL = './robob.glb';
+const MODEL_URL = '/models/robob.glb';
 // const ANIMATION_MODEL_URL = 'https://threejs.org/examples/models/gltf/Soldier.glb';
 
 // Refined aura shader for tighter conformity
