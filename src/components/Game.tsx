@@ -12,13 +12,26 @@ import { KeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import Stars from './Stars';
 
-// Simple fallback component for loading
-function SimpleLoading() {
+// Ultra simple debugging component
+function SimpleDebugScene() {
   return (
-    <mesh position={[0, 0, 0]}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="red" />
-    </mesh>
+    <>
+      {/* Super bright light to ensure visibility */}
+      <ambientLight intensity={2.0} />
+      <pointLight position={[0, 5, 0]} intensity={5.0} />
+      
+      {/* Basic mesh with bright color */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color="hotpink" emissive="hotpink" emissiveIntensity={0.5} />
+      </mesh>
+      
+      {/* Floor to help with orientation */}
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -1, 0]} receiveShadow>
+        <planeGeometry args={[20, 20]} />
+        <meshStandardMaterial color="limegreen" />
+      </mesh>
+    </>
   );
 }
 
@@ -71,51 +84,17 @@ export default function Game() {
       >
         <Canvas 
           shadows 
-          style={{ width: '100%', height: '100%' }}
+          style={{ background: 'red', width: '100%', height: '100%' }}
           gl={{ antialias: true, alpha: false }}
-          camera={{ position: [0, 5, 10], fov: 45 }}
+          camera={{ position: [0, 1, 5], fov: 60 }}
         >
-          {/* Debug stats - comment out in production */}
+          <color attach="background" args={["purple"]} />
+          
+          {/* Debug stats */}
           <Stats />
           
-          {/* Scene background color */}
-          <color attach="background" args={["#000000"]} />
-          <fog attach="fog" color="#000000" near={1} far={50} />
-          
-          {/* Enhanced lighting */}
-          <ambientLight intensity={1.0} />
-          <pointLight position={[10, 10, 10]} intensity={2.0} />
-          <directionalLight 
-            position={[5, 5, 5]}
-            intensity={1.0}
-            castShadow
-            shadow-mapSize={[2048, 2048]}
-          />
-          
-          <Suspense fallback={<SimpleLoading />}>
-            <OrbitControls 
-              target={[0, 0, 0]}
-              maxPolarAngle={Math.PI / 2}
-              enableZoom={true}
-              minDistance={2}
-              maxDistance={15}
-              zoomSpeed={1}
-            />
-            
-            <Stars />
-            <Room />
-            <Player position={position} />
-            <Npc />
-            <SecondNpc />
-            
-            {/* Render collision effect when collision is detected */}
-            {isColliding && (
-              <CollisionEffect position={new THREE.Vector3(
-                collisionPosition[0], 
-                collisionPosition[1], 
-                collisionPosition[2]
-              )} />
-            )}
+          <Suspense fallback={null}>
+            <SimpleDebugScene />
           </Suspense>
         </Canvas>
       </KeyboardControls>
