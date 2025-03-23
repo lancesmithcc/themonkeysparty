@@ -23,6 +23,7 @@ export default function MobileControls() {
   const touchStartPos = useRef<{x: number, y: number} | null>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
   const [isTouching, setIsTouching] = useState(false)
+  const [activeButton, setActiveButton] = useState<string | null>(null)
   
   // Detect mobile device
   const [isMobile, setIsMobile] = useState(false)
@@ -51,17 +52,39 @@ export default function MobileControls() {
     }
   }, [])
   
+  // Handle D-pad button press
+  const handleButtonPress = (direction: string) => {
+    setActiveButton(direction)
+    switch (direction) {
+      case 'up':
+        setMoveDirection(new THREE.Vector3(0, 0, -1))
+        break
+      case 'down':
+        setMoveDirection(new THREE.Vector3(0, 0, 1))
+        break
+      case 'left':
+        setMoveDirection(new THREE.Vector3(-1, 0, 0))
+        break
+      case 'right':
+        setMoveDirection(new THREE.Vector3(1, 0, 0))
+        break
+      default:
+        setMoveDirection(new THREE.Vector3(0, 0, 0))
+    }
+  }
+  
+  // Handle D-pad button release
+  const handleButtonRelease = () => {
+    setActiveButton(null)
+    setMoveDirection(new THREE.Vector3(0, 0, 0))
+  }
+  
   useEffect(() => {
     if (!isMobile) return
     
     // Handle touch events for camera control
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        // Single touch for cursor control
-        const touch = e.touches[0]
-        touchStartPos.current = { x: touch.clientX, y: touch.clientY }
-        setIsTouching(true)
-      } else if (e.touches.length === 2) {
+      if (e.touches.length === 2) {
         // Double touch for pinch-zoom
         const touch1 = e.touches[0]
         const touch2 = e.touches[1]
@@ -78,35 +101,12 @@ export default function MobileControls() {
     }
     
     const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault()
+      // Always prevent default to avoid browser gestures, except on D-pad
+      if (!(e.target as HTMLElement)?.closest('.d-pad-button')) {
+        e.preventDefault()
+      }
       
-      if (e.touches.length === 1) {
-        // Single touch movement - update cursor and control character
-        const touch = e.touches[0]
-        const x = touch.clientX
-        const y = touch.clientY
-        
-        if (touchStartPos.current) {
-          // Calculate swipe direction for character movement
-          const deltaX = x - touchStartPos.current.x
-          const deltaY = y - touchStartPos.current.y
-          const swipeThreshold = 20
-          
-          // Only move if swipe distance exceeds threshold
-          if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
-            // Normalize for direction
-            const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
-            const normalizedX = deltaX / length
-            const normalizedY = deltaY / length
-            
-            // Set movement direction
-            setMoveDirection(new THREE.Vector3(normalizedX, 0, normalizedY))
-          } else {
-            // Reset movement if swipe is too small
-            setMoveDirection(new THREE.Vector3(0, 0, 0))
-          }
-        }
-      } else if (e.touches.length === 2 && initialDistance.current !== null && camera) {
+      if (e.touches.length === 2 && initialDistance.current !== null && camera) {
         // Only run pinch-zoom if camera is available
         const touch1 = e.touches[0]
         const touch2 = e.touches[1]
@@ -143,12 +143,9 @@ export default function MobileControls() {
     }
     
     const handleTouchEnd = () => {
-      // Reset movement direction when touch ends
-      setMoveDirection(new THREE.Vector3(0, 0, 0))
       initialDistance.current = null
       initialRotation.current = null
       touchStartPos.current = null
-      setIsTouching(false)
     }
     
     // Add touch event listeners
@@ -165,28 +162,80 @@ export default function MobileControls() {
   
   if (!isMobile) return null
   
+  // Common button styles
+  const buttonBase = "absolute w-14 h-14 flex items-center justify-center bg-gray-800 rounded-md border-2 active:bg-gray-700"
+  const buttonActive = "bg-gray-700 border-red-500"
+  const buttonInactive = "bg-gray-800 border-gray-600"
+  
   return (
     <>
-      {/* Fixed position control pad in bottom left corner */}
+      {/* Nintendo D-pad in top right corner */}
       <div 
         ref={cursorRef}
-        className={`fixed bottom-5 left-5 pointer-events-none w-20 h-20 z-[9999] transition-all ${
-          isTouching ? 'opacity-100' : 'opacity-60'
-        }`}
+        className="fixed top-5 right-5 w-44 h-44 z-[9999]"
       >
-        {/* Nintendo-style cursor */}
-        <div className="w-full h-full flex items-center justify-center nintendo-cursor">
-          <div className="w-16 h-16 rounded-full border-4 border-white opacity-80 flex items-center justify-center">
-            <div className="w-10 h-10 rounded-full bg-white opacity-80 flex items-center justify-center">
-              <div className="w-5 h-5 rounded-full bg-red-500"></div>
+        {/* D-pad container */}
+        <div className="relative w-full h-full">
+          {/* Up button */}
+          <button
+            className={`${buttonBase} top-0 left-1/2 transform -translate-x-1/2 ${activeButton === 'up' ? buttonActive : buttonInactive}`}
+            onTouchStart={() => handleButtonPress('up')}
+            onTouchEnd={handleButtonRelease}
+            onTouchCancel={handleButtonRelease}
+          >
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          
+          {/* Left button */}
+          <button
+            className={`${buttonBase} top-1/2 left-0 transform -translate-y-1/2 ${activeButton === 'left' ? buttonActive : buttonInactive}`}
+            onTouchStart={() => handleButtonPress('left')}
+            onTouchEnd={handleButtonRelease}
+            onTouchCancel={handleButtonRelease}
+          >
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          
+          {/* Center button - only for styling */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-gray-800 rounded-md border-2 border-gray-600">
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
             </div>
           </div>
+          
+          {/* Right button */}
+          <button
+            className={`${buttonBase} top-1/2 right-0 transform -translate-y-1/2 ${activeButton === 'right' ? buttonActive : buttonInactive}`}
+            onTouchStart={() => handleButtonPress('right')}
+            onTouchEnd={handleButtonRelease}
+            onTouchCancel={handleButtonRelease}
+          >
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          
+          {/* Down button */}
+          <button
+            className={`${buttonBase} bottom-0 left-1/2 transform -translate-x-1/2 ${activeButton === 'down' ? buttonActive : buttonInactive}`}
+            onTouchStart={() => handleButtonPress('down')}
+            onTouchEnd={handleButtonRelease}
+            onTouchCancel={handleButtonRelease}
+          >
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
       </div>
       
       {/* Touch instructions */}
-      <div className="fixed bottom-28 left-5 z-[9999] bg-black bg-opacity-70 text-white text-xs p-2 rounded-lg whitespace-nowrap">
-        Swipe to move • Pinch to zoom & rotate
+      <div className="fixed top-5 left-5 z-[9999] bg-black bg-opacity-70 text-white text-xs p-2 rounded-lg whitespace-nowrap">
+        D-pad to move • Pinch to zoom & rotate
       </div>
     </>
   )
