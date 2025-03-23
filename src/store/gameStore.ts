@@ -95,7 +95,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   npcPosition: [2, 0, 2],
   npcMoveDirection: new THREE.Vector3(0, 0, 0),
   npcTarget: [2, 0, 2],
-  npcWanderTimer: 0,
+  npcWanderTimer: 10, // Initialize with a small value to start moving immediately
   npcFibStep: 1,
   npcFibDirection: 0,
   
@@ -261,16 +261,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     const newTimer = npcWanderTimer - 1;
     if (newTimer <= 0) {
       // Use Fibonacci pattern for movement
-      const nextFibStep = (npcFibStep % 7) + 1; // Cycle through first 7 Fibonacci numbers
+      const nextFibStep = (npcFibStep % 10) + 1; // Cycle through first 10 Fibonacci numbers
       const fibValue = getFibonacciNumber(nextFibStep);
       
-      // Increment direction by 45 degrees (π/4) each Fibonacci step
-      const nextDirection = (npcFibDirection + Math.PI / 4) % (2 * Math.PI);
+      // Increment direction more frequently for more active movement
+      const nextDirection = (npcFibDirection + Math.PI / 3) % (2 * Math.PI);
       
       set({ 
         npcFibStep: nextFibStep,
         npcFibDirection: nextDirection,
-        npcWanderTimer: fibValue * 30 + 50 // Scale Fibonacci number for timer
+        npcWanderTimer: fibValue * 15 + 10 // Scale Fibonacci number for shorter timer (more movement)
       });
       
       get().setNewNpcTarget();
@@ -284,14 +284,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       npcTarget[2] - npcPosition[2]
     );
     
-    // If close to target, slow down
+    // If close to target, set a new target more quickly
     const distanceToTarget = targetVector.length();
-    if (distanceToTarget < 0.2) {
+    if (distanceToTarget < 0.1) { // Reduced threshold to change targets more often
       set({ 
         npcMoveDirection: new THREE.Vector3(0, 0, 0),
-        // Use Fibonacci sequence for pause duration
-        npcWanderTimer: getFibonacciNumber(npcFibStep) * 20
+        // Shorter pause at destination
+        npcWanderTimer: 10 + Math.random() * 20
       });
+      // 20% chance to immediately pick a new target
+      if (Math.random() < 0.2) {
+        get().setNewNpcTarget();
+      }
       return;
     }
     
@@ -299,10 +303,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     targetVector.normalize();
     set({ npcMoveDirection: targetVector });
     
-    // Move towards target with smoother, varied speed
-    // Speed oscillates based on Fibonacci pattern
-    const fibMod = (Math.sin(getFibonacciNumber(npcFibStep) * 0.1) + 1) * 0.5; // 0 to 1
-    const speed = MOVEMENT_SPEED * (0.6 + fibMod * 0.7); // 0.6 to 1.3 × base speed
+    // Move towards target with faster speed
+    const speed = MOVEMENT_SPEED * (1.2 + Math.sin(Date.now() * 0.001) * 0.3); // Faster base movement
     
     const newX = npcPosition[0] + targetVector.x * speed;
     const newZ = npcPosition[2] + targetVector.z * speed;
@@ -323,14 +325,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNewNpcTarget: () => {
     const { npcFibStep, npcFibDirection, npcPosition } = get();
     
-    // Use Fibonacci number to determine distance
+    // Use Fibonacci number to determine distance but scale up for longer paths
     const fibNumber = getFibonacciNumber(npcFibStep);
     const normalizedFib = fibNumber / 10; // Scale down to reasonable values
-    const distance = PLATFORM_RADIUS * 0.5 * Math.min(normalizedFib, 0.8); // Cap at 80% of platform radius
+    const distance = PLATFORM_RADIUS * 0.6 * Math.min(normalizedFib + 0.3, 0.9); // More distance, cap at 90% of radius
     
-    // Calculate new target position using the Fibonacci direction
-    const newX = npcPosition[0] + Math.cos(npcFibDirection) * distance;
-    const newZ = npcPosition[2] + Math.sin(npcFibDirection) * distance;
+    // Add some randomness to the direction for less predictable patterns
+    const randomOffset = (Math.random() - 0.5) * Math.PI / 4; // ±22.5 degrees randomness
+    const direction = npcFibDirection + randomOffset;
+    
+    // Calculate new target position using the direction
+    const newX = Math.cos(direction) * distance;
+    const newZ = Math.sin(direction) * distance;
     
     // Ensure target is within platform bounds
     if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
@@ -338,12 +344,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     } else {
       // If outside bounds, pick a point toward center
       const angle = Math.atan2(npcPosition[2], npcPosition[0]) + Math.PI; // Opposite direction
-      const safeDistance = PLATFORM_RADIUS * 0.4;
+      const safeDistance = PLATFORM_RADIUS * 0.5;
       set({ 
         npcTarget: [
-          npcPosition[0] + Math.cos(angle) * safeDistance,
+          Math.cos(angle) * safeDistance,
           0,
-          npcPosition[2] + Math.sin(angle) * safeDistance
+          Math.sin(angle) * safeDistance
         ]
       });
     }
@@ -366,7 +372,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Calculate collision point (midpoint between characters)
       const collisionPoint: [number, number, number] = [
         (playerPosition[0] + npcPosition[0]) / 2,
-        (playerPosition[1] + npcPosition[1]) / 2,
+        (playerPosition[1] + npcPosition[1]) / 2.5 + 0.5, // Raise collision point to be more visible
         (playerPosition[2] + npcPosition[2]) / 2
       ];
       
@@ -404,9 +410,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentSpeed: 0 // Reset player speed on collision
       });
       
-      // Reset collision state after animation duration
+      // After collision, NPC should move in a new direction
       setTimeout(() => {
-        set({ isColliding: false });
+        if (!get().isColliding) return; // In case it's been reset by another collision
+        
+        set({ 
+          isColliding: false,
+          npcWanderTimer: 5 // Move again quickly after collision
+        });
+        get().setNewNpcTarget();
       }, COLLISION_DURATION);
     }
   }
