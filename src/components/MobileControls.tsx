@@ -22,7 +22,6 @@ export default function MobileControls() {
   const initialRotation = useRef<number | null>(null)
   const touchStartPos = useRef<{x: number, y: number} | null>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
-  const [isTouching, setIsTouching] = useState(false)
   const [activeButton, setActiveButton] = useState<string | null>(null)
   
   // Detect mobile device
