@@ -43,6 +43,14 @@ function getFibonacciNumber(n: number): number {
   return result;
 }
 
+// Define the interface for second NPC target settings
+interface SecondNpcTargetSettings {
+  timer: number;
+  moveDirection: THREE.Vector3;
+  fibStep: number;
+  fibDirection: number;
+}
+
 // Define the game state interface
 export interface GameState {
   // Player state
@@ -90,6 +98,19 @@ export interface GameState {
   
   // Collision detection
   checkCollision: () => void;
+  
+  // Second NPC properties
+  secondNpcPosition: [number, number, number];
+  secondNpcRotation: [number, number, number];
+  secondNpcMoveDirection: THREE.Vector3;
+  secondNpcFibStep: number;
+  secondNpcFibDirection: number;
+  secondNpcWanderTimer: number;
+  shouldSecondNpcMove: boolean;
+  
+  // Methods for second NPC movement
+  updateSecondNpcPosition: () => void;
+  setNewSecondNpcTarget: (state: GameState, settings: SecondNpcTargetSettings) => Partial<GameState>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -454,5 +475,170 @@ export const useGameStore = create<GameState>((set, get) => ({
         isColliding: false
       });
     }
-  }
+  },
+  
+  // Second NPC initialization
+  secondNpcPosition: [3, 0, 3], // Start at a different position than first NPC
+  secondNpcRotation: [0, 0, 0],
+  secondNpcMoveDirection: new THREE.Vector3(),
+  secondNpcFibStep: 1,
+  secondNpcFibDirection: 1,
+  secondNpcWanderTimer: 0,
+  shouldSecondNpcMove: true,
+  
+  // Second NPC movement functions (similar to first NPC but with different patterns)
+  updateSecondNpcPosition: () => {
+    set((state) => {
+      // Skip movement if collision is happening or movement is disabled
+      if (state.isColliding || !state.shouldSecondNpcMove) {
+        return state;
+      }
+
+      const deltaTime = 1; // Fixed for consistency
+      const { secondNpcWanderTimer, secondNpcFibStep, secondNpcFibDirection } = state;
+      
+      // Fibonacci sequence for a more interesting movement pattern
+      const fibValues = [1, 1, 2, 3, 5, 8, 13, 21, 34];
+      const fibValue = fibValues[secondNpcFibStep];
+      
+      // Check if timer is up
+      if (secondNpcWanderTimer <= 0) {
+        // Reset timer with Fibonacci-based timeout (shorter than first NPC)
+        const newTimer = fibValue * 7 + 3; // Slightly more dynamic than first NPC
+        
+        // Set new direction at a more varied angle - more graceful, wider turns
+        const angleChange = (Math.random() * 40 + 20) * (Math.random() > 0.5 ? 1 : -1); // 20-60 degrees
+        const currentAngle = Math.atan2(state.secondNpcMoveDirection.x, state.secondNpcMoveDirection.z);
+        const newAngle = currentAngle + (angleChange * Math.PI / 180); 
+        
+        // Calculate new direction vector
+        const newDirectionX = Math.sin(newAngle);
+        const newDirectionZ = Math.cos(newAngle);
+        
+        // Create new direction vector
+        const newMoveDirection = new THREE.Vector3(newDirectionX, 0, newDirectionZ).normalize();
+        
+        // Update Fibonacci step for next movement pattern
+        let newFibStep = state.secondNpcFibStep + state.secondNpcFibDirection;
+        let newFibDirection = state.secondNpcFibDirection;
+        
+        // Reset Fibonacci sequence when reaching limits
+        if (newFibStep >= fibValues.length - 1) {
+          newFibDirection = -1;
+          newFibStep = fibValues.length - 2;
+        } else if (newFibStep <= 0) {
+          newFibDirection = 1;
+          newFibStep = 1;
+        }
+        
+        // Set new target position
+        return setNewSecondNpcTarget(state, {
+          timer: newTimer,
+          moveDirection: newMoveDirection,
+          fibStep: newFibStep,
+          fibDirection: newFibDirection
+        });
+      }
+      
+      // Move NPC towards target
+      const newPosition = new THREE.Vector3().copy(state.secondNpcPosition);
+      
+      // Apply movement based on direction
+      newPosition.x += state.secondNpcMoveDirection.x * MOVEMENT_SPEED * 1.2; // Slightly faster
+      newPosition.z += state.secondNpcMoveDirection.z * MOVEMENT_SPEED * 1.2;
+      
+      // Constrain to platform
+      const distanceFromCenter = Math.sqrt(
+        newPosition.x * newPosition.x + newPosition.z * newPosition.z
+      );
+      
+      if (distanceFromCenter > PLATFORM_RADIUS) {
+        // Bounce from edge with a graceful angle
+        const angle = Math.atan2(newPosition.x, newPosition.z);
+        
+        // Set position at boundary
+        newPosition.x = Math.sin(angle) * PLATFORM_RADIUS * 0.95;
+        newPosition.z = Math.cos(angle) * PLATFORM_RADIUS * 0.95;
+        
+        // Calculate reflection angle with a graceful variation
+        const reflectionVariation = (Math.random() * 30 - 15) * Math.PI / 180; // ±15 degrees for elegance
+        const reflectionAngle = angle + Math.PI + reflectionVariation;
+        
+        // Update movement direction with reflection
+        const newDirectionX = Math.sin(reflectionAngle);
+        const newDirectionZ = Math.cos(reflectionAngle);
+        
+        return {
+          ...state,
+          secondNpcPosition: [newPosition.x, newPosition.y, newPosition.z],
+          secondNpcMoveDirection: new THREE.Vector3(newDirectionX, 0, newDirectionZ).normalize(),
+          secondNpcRotation: [0, Math.atan2(newDirectionX, newDirectionZ), 0]
+        };
+      }
+      
+      // Apply rotation to face movement direction
+      const newRotation: [number, number, number] = [
+        0,
+        Math.atan2(state.secondNpcMoveDirection.x, state.secondNpcMoveDirection.z),
+        0
+      ];
+      
+      return {
+        ...state,
+        secondNpcPosition: [newPosition.x, newPosition.y, newPosition.z],
+        secondNpcRotation: newRotation,
+        secondNpcWanderTimer: secondNpcWanderTimer - deltaTime
+      };
+    });
+  },
+  
+  // Set new target for second NPC
+  setNewSecondNpcTarget: (state: GameState, { timer, moveDirection, fibStep, fibDirection }: SecondNpcTargetSettings): Partial<GameState> => {
+    // Different target selection for second NPC - more variable radius exploration
+    const currentPos = new THREE.Vector3(
+      state.secondNpcPosition[0],
+      state.secondNpcPosition[1],
+      state.secondNpcPosition[2]
+    );
+    
+    // Decide target radius - 2nd NPC explores more outer areas
+    const useRandomTarget = Math.random() < 0.2; // 20% chance to use a random target
+    
+    if (useRandomTarget) {
+      // Random point anywhere on platform at varying distances
+      const randomAngle = Math.random() * Math.PI * 2;
+      // Prefer outer areas (60-95% of radius)
+      const randomDistance = PLATFORM_RADIUS * (0.6 + Math.random() * 0.35); 
+      
+      const targetX = Math.sin(randomAngle) * randomDistance;
+      const targetZ = Math.cos(randomAngle) * randomDistance;
+      
+      // Create direction to this random point
+      const direction = new THREE.Vector3(targetX, 0, targetZ).sub(currentPos).normalize();
+      
+      return {
+        ...state,
+        secondNpcMoveDirection: direction,
+        secondNpcWanderTimer: timer,
+        secondNpcFibStep: fibStep,
+        secondNpcFibDirection: fibDirection,
+        secondNpcRotation: [0, Math.atan2(direction.x, direction.z), 0]
+      };
+    } 
+    
+    // For standard movement, use the provided direction
+    return {
+      ...state,
+      secondNpcMoveDirection: moveDirection,
+      secondNpcWanderTimer: timer,
+      secondNpcFibStep: fibStep,
+      secondNpcFibDirection: fibDirection,
+      secondNpcRotation: [0, Math.atan2(moveDirection.x, moveDirection.z), 0]
+    };
+  },
 }));
+
+// Helper function for setting second NPC target
+function setNewSecondNpcTarget(state: GameState, { timer, moveDirection, fibStep, fibDirection }: SecondNpcTargetSettings): Partial<GameState> {
+  return state.setNewSecondNpcTarget(state, { timer, moveDirection, fibStep, fibDirection });
+}
