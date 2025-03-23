@@ -5,10 +5,12 @@ interface GameState {
   playerPosition: [number, number, number];
   moveDirection: THREE.Vector3;
   isStrafing: boolean;
+  isMobile: boolean;
   setMoveDirection: (direction: THREE.Vector3) => void;
   handleKeyDown: (event: KeyboardEvent) => void;
   handleKeyUp: (event: KeyboardEvent) => void;
   updatePosition: (delta: number) => void;
+  setIsMobile: (isMobile: boolean) => void;
 }
 
 // Hexagon platform parameters
@@ -18,7 +20,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   playerPosition: [0, 0, 0],
   moveDirection: new THREE.Vector3(),
   isStrafing: false,
+  isMobile: false,
   setMoveDirection: (direction) => set({ moveDirection: direction }),
+  
+  // Set mobile state
+  setIsMobile: (isMobile) => set({ isMobile }),
   
   // Function to update position with platform boundary checking
   updatePosition: (delta: number) => {
@@ -64,15 +70,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     switch (event.key) {
       case 'ArrowUp':
+      case 'w':
+      case 'W':
         newDirection.z = -1; // Forward (negative Z)
         break;
       case 'ArrowDown':
+      case 's':
+      case 'S':
         newDirection.z = 1; // Backward (positive Z)
         break;
       case 'ArrowLeft':
+      case 'a':
+      case 'A':
         newDirection.x = -1; // Left (negative X)
         break;
       case 'ArrowRight':
+      case 'd':
+      case 'D':
         newDirection.x = 1; // Right (positive X)
         break;
     }
@@ -93,10 +107,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     switch (event.key) {
       case 'ArrowUp':
       case 'ArrowDown':
+      case 'w':
+      case 'W':
+      case 's':
+      case 'S':
         newDirection.z = 0;
         break;
       case 'ArrowLeft':
       case 'ArrowRight':
+      case 'a':
+      case 'A':
+      case 'd':
+      case 'D':
         newDirection.x = 0;
         break;
     }
