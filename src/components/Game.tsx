@@ -1,19 +1,35 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Html } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { useEffect, Suspense } from 'react';
 import Room from './Room';
 import Player from './Player';
 import Npc from './Npc';
+import CollisionEffect from './CollisionEffect';
 import MobileControls from './MobileControls';
 import { useGameStore } from '../store/gameStore';
-import * as THREE from 'three';
+import { KeyboardControls } from '@react-three/drei';
+import GeometricShapes from './GeometricShapes';
+
+// Simple fallback component for loading
+function SimpleLoading() {
+  return (
+    <mesh>
+      <sphereGeometry args={[0.5, 16, 16]} />
+      <meshBasicMaterial color="white" wireframe />
+    </mesh>
+  );
+}
 
 export default function Game() {
   const position = useGameStore((state) => state.playerPosition);
   const handleKeyDown = useGameStore((state) => state.handleKeyDown);
   const handleKeyUp = useGameStore((state) => state.handleKeyUp);
   const setIsMobile = useGameStore((state) => state.setIsMobile);
+  const isMobile = useGameStore((state) => state.isMobile);
 
+  // Add debug logging
+  console.log("Game component rendering", position);
+  
   // Detect mobile and set in store
   useEffect(() => {
     const checkMobile = () => {
@@ -43,32 +59,31 @@ export default function Game() {
   }, [handleKeyDown, handleKeyUp]);
 
   return (
-    <div className="w-full h-screen">
-      <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-black text-white">Loading...</div>}>
+    <div className="game-container">
+      <KeyboardControls
+        map={[
+          { name: 'forward', keys: ['ArrowUp', 'w', 'W'] },
+          { name: 'backward', keys: ['ArrowDown', 's', 'S'] },
+          { name: 'left', keys: ['ArrowLeft', 'a', 'A'] },
+          { name: 'right', keys: ['ArrowRight', 'd', 'D'] },
+        ]}
+      >
         <Canvas shadows>
           {/* Set scene background color to black */}
           <color attach="background" args={["#000000"]} />
           
-          <PerspectiveCamera makeDefault position={[0, 2, 5]} />
-          <OrbitControls 
-            enablePan={false} 
+          <PerspectiveCamera makeDefault position={[0, 10, 10]} />
+          <OrbitControls
+            target={[0, 0, 0]}
             maxPolarAngle={Math.PI / 2}
-            enableDamping
-            dampingFactor={0.1}
-            minDistance={3}
-            maxDistance={10}
+            enableZoom={false}
           />
           
           {/* Increased ambient light */}
-          <ambientLight intensity={0.7} />
+          <ambientLight intensity={0.5} />
           
           {/* Added point light above character */}
-          <pointLight
-            position={[0, 8, 0]}
-            intensity={1}
-            castShadow
-            shadow-mapSize={[2048, 2048]}
-          />
+          <pointLight position={[10, 10, 10]} intensity={1.5} />
           
           {/* Directional light for general illumination */}
           <directionalLight
@@ -78,16 +93,16 @@ export default function Game() {
             shadow-mapSize={[2048, 2048]}
           />
           
-          <Room />
-          <Player position={position} />
-          <Npc />
-          
-          {/* Mobile controls now rendered inside Canvas as HTML */}
-          <Html fullscreen>
-            <MobileControls />
-          </Html>
+          <Suspense fallback={<SimpleLoading />}>
+            <Room />
+            <GeometricShapes />
+            <Player position={position} />
+            <Npc />
+            <CollisionEffect />
+          </Suspense>
         </Canvas>
-      </Suspense>
+      </KeyboardControls>
+      {isMobile && <MobileControls />}
     </div>
   );
 }
