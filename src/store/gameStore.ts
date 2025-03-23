@@ -1,252 +1,307 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 
-interface GameState {
-  playerPosition: [number, number, number];
-  npcPosition: [number, number, number];
-  moveDirection: THREE.Vector3;
-  npcMoveDirection: THREE.Vector3;
-  isStrafing: boolean;
-  isMobile: boolean;
-  npcTargetPosition: [number, number, number];
-  npcWanderTimer: number;
-  setMoveDirection: (direction: THREE.Vector3) => void;
-  handleKeyDown: (event: KeyboardEvent) => void;
-  handleKeyUp: (event: KeyboardEvent) => void;
-  updatePosition: (delta: number) => void;
-  updateNpcPosition: (delta: number) => void;
-  setIsMobile: (isMobile: boolean) => void;
+// Constants for platform bounds checking
+const PLATFORM_RADIUS = 4;
+const MOVEMENT_SPEED = 0.1;
+const COLLISION_DISTANCE = 0.8;
+const COLLISION_DURATION = 1500; // ms
+const COLLISION_KNOCKBACK = 0.5;
+
+// Helper function to check if a position is within hexagon bounds
+function isWithinHexagon(x: number, z: number, radius: number): boolean {
+  // Hexagon boundary check (based on regular hexagon math)
+  const absoluteX = Math.abs(x);
+  const absoluteZ = Math.abs(z);
+  
+  // Check against hexagon boundaries
+  if (absoluteX > radius * Math.sqrt(3) / 2) return false;
+  if (absoluteZ > radius) return false;
+  if (absoluteX * 0.5 + absoluteZ * Math.sqrt(3) / 2 > radius * Math.sqrt(3) / 2) return false;
+  
+  return true;
 }
 
-// Hexagon platform parameters
-const PLATFORM_RADIUS = 5.0; // Must match the radius in Room.tsx
-
-// NPC movement parameters
-const NPC_SPEED = 0.5; // Slower than player
-const NPC_WANDER_INTERVAL_MIN = 3; // Minimum seconds before changing direction
-const NPC_WANDER_INTERVAL_MAX = 8; // Maximum seconds before changing direction
-const NPC_PROXIMITY_RADIUS = 1.5; // How close NPC gets to target before finding new target
-const NPC_ROTATION_SPEED = 0.07; // How quickly the NPC rotates to new directions
+// Define the game state interface
+export interface GameState {
+  // Player state
+  playerPosition: [number, number, number];
+  moveDirection: THREE.Vector3;
+  isPlayerMoving: boolean;
+  
+  // NPC state
+  npcPosition: [number, number, number];
+  npcMoveDirection: THREE.Vector3;
+  npcTarget: [number, number, number];
+  npcWanderTimer: number;
+  
+  // Collision state
+  isColliding: boolean;
+  collisionTime: number;
+  collisionPosition: [number, number, number] | null;
+  
+  // Mobile state
+  isMobile: boolean;
+  setIsMobile: (isMobile: boolean) => void;
+  
+  // Methods for player movement
+  handleKeyDown: (e: KeyboardEvent) => void;
+  handleKeyUp: (e: KeyboardEvent) => void;
+  setMoveDirection: (direction: THREE.Vector3) => void;
+  updatePosition: () => void;
+  
+  // Methods for NPC movement
+  updateNpcPosition: () => void;
+  setNewNpcTarget: () => void;
+  
+  // Collision detection
+  checkCollision: () => void;
+}
 
 export const useGameStore = create<GameState>((set, get) => ({
+  // Player state
   playerPosition: [0, 0, 0],
-  npcPosition: [2, 0, 2], // Start NPC at a different position
-  moveDirection: new THREE.Vector3(),
-  npcMoveDirection: new THREE.Vector3(),
-  isStrafing: false,
-  isMobile: false,
-  npcTargetPosition: [2, 0, 2], // Initial target is the same as position
-  npcWanderTimer: 0,
-  setMoveDirection: (direction) => set({ moveDirection: direction }),
+  moveDirection: new THREE.Vector3(0, 0, 0),
+  isPlayerMoving: false,
   
-  // Set mobile state
+  // NPC state
+  npcPosition: [2, 0, 2],
+  npcMoveDirection: new THREE.Vector3(0, 0, 0),
+  npcTarget: [2, 0, 2],
+  npcWanderTimer: 0,
+  
+  // Collision state
+  isColliding: false,
+  collisionTime: 0,
+  collisionPosition: null,
+  
+  // Mobile state
+  isMobile: false,
   setIsMobile: (isMobile) => set({ isMobile }),
   
-  // Function to update position with platform boundary checking
-  updatePosition: (delta: number) => {
-    const { playerPosition, moveDirection } = get();
+  // Set the movement direction based on key input
+  handleKeyDown: (e) => {
+    const { moveDirection } = get();
+    const newDirection = new THREE.Vector3(moveDirection.x, moveDirection.y, moveDirection.z);
     
-    if (moveDirection.length() === 0) return;
+    switch (e.key) {
+      case 'w':
+      case 'W':
+      case 'ArrowUp':
+        newDirection.z = -1;
+        break;
+      case 's':
+      case 'S':
+      case 'ArrowDown':
+        newDirection.z = 1;
+        break;
+      case 'a':
+      case 'A':
+      case 'ArrowLeft':
+        newDirection.x = -1;
+        break;
+      case 'd':
+      case 'D':
+      case 'ArrowRight':
+        newDirection.x = 1;
+        break;
+    }
+    
+    set({ 
+      moveDirection: newDirection,
+      isPlayerMoving: newDirection.length() > 0
+    });
+  },
+  
+  // Clear the movement direction when key is released
+  handleKeyUp: (e) => {
+    const { moveDirection } = get();
+    const newDirection = new THREE.Vector3(moveDirection.x, moveDirection.y, moveDirection.z);
+    
+    switch (e.key) {
+      case 'w':
+      case 'W':
+      case 'ArrowUp':
+        if (moveDirection.z === -1) newDirection.z = 0;
+        break;
+      case 's':
+      case 'S':
+      case 'ArrowDown':
+        if (moveDirection.z === 1) newDirection.z = 0;
+        break;
+      case 'a':
+      case 'A':
+      case 'ArrowLeft':
+        if (moveDirection.x === -1) newDirection.x = 0;
+        break;
+      case 'd':
+      case 'D':
+      case 'ArrowRight':
+        if (moveDirection.x === 1) newDirection.x = 0;
+        break;
+    }
+    
+    set({ 
+      moveDirection: newDirection,
+      isPlayerMoving: newDirection.length() > 0
+    });
+  },
+  
+  // Set movement direction directly (for mobile controls)
+  setMoveDirection: (direction) => {
+    set({ 
+      moveDirection: direction,
+      isPlayerMoving: direction.length() > 0
+    });
+  },
+  
+  // Update the player's position based on the movement direction
+  updatePosition: () => {
+    const { playerPosition, moveDirection, isColliding } = get();
+    
+    // No movement during collision animation
+    if (isColliding) return;
+    
+    // Normalize for diagonal movement
+    const normalizedDirection = moveDirection.clone().normalize();
     
     // Calculate new position
-    const speed = 1; // Movement speed
-    const newX = playerPosition[0] + moveDirection.x * speed * delta;
-    const newZ = playerPosition[2] + moveDirection.z * speed * delta;
+    const newX = playerPosition[0] + normalizedDirection.x * MOVEMENT_SPEED;
+    const newZ = playerPosition[2] + normalizedDirection.z * MOVEMENT_SPEED;
     
-    // Check if the new position is within the hexagon boundary
-    // Using a simple circular approximation for the hexagon
-    const distanceFromCenter = Math.sqrt(newX * newX + newZ * newZ);
-    
-    // Add a small margin to prevent getting too close to the edge
-    const safeRadius = PLATFORM_RADIUS - 0.3;
-    
-    if (distanceFromCenter <= safeRadius) {
-      // Only update if within bounds
+    // Check if the new position is within bounds
+    if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
       set({ playerPosition: [newX, playerPosition[1], newZ] });
-    } else {
-      // Optional: Slide along the boundary
-      // This is a simple approach - calculate the unit vector toward the center
-      // and adjust the position to stay at the boundary
-      const angle = Math.atan2(newZ, newX);
-      const boundaryX = safeRadius * Math.cos(angle);
-      const boundaryZ = safeRadius * Math.sin(angle);
-      set({ playerPosition: [boundaryX, playerPosition[1], boundaryZ] });
     }
+    
+    // Check for collision with NPC
+    get().checkCollision();
   },
   
-  // Function to update NPC position with AI movement
-  updateNpcPosition: (delta: number) => {
-    const { npcPosition, npcTargetPosition, npcMoveDirection, npcWanderTimer, playerPosition } = get();
+  // Update NPC position
+  updateNpcPosition: () => {
+    const { npcPosition, npcTarget, npcWanderTimer, npcMoveDirection, isColliding } = get();
     
-    // Decrement wander timer
-    const newWanderTimer = npcWanderTimer - delta;
+    // No movement during collision animation
+    if (isColliding) return;
     
-    // Check if we need a new target position
-    let newTargetPosition = [...npcTargetPosition] as [number, number, number];
-    let newMoveDirection = npcMoveDirection.clone();
-    
-    if (newWanderTimer <= 0 || 
-        (Math.abs(npcPosition[0] - npcTargetPosition[0]) < NPC_PROXIMITY_RADIUS && 
-         Math.abs(npcPosition[2] - npcTargetPosition[2]) < NPC_PROXIMITY_RADIUS)) {
-      
-      // Generate new random target position within platform boundary
-      const randomAngle = Math.random() * Math.PI * 2;
-      const randomRadius = Math.random() * (PLATFORM_RADIUS - 1.0); // Stay away from the edge
-      
-      newTargetPosition = [
-        randomRadius * Math.cos(randomAngle),
-        0,
-        randomRadius * Math.sin(randomAngle)
-      ];
-      
-      // Set new timer
-      const newTimer = NPC_WANDER_INTERVAL_MIN + 
-                       Math.random() * (NPC_WANDER_INTERVAL_MAX - NPC_WANDER_INTERVAL_MIN);
-      
-      // Calculate direction to new target
-      const directionX = newTargetPosition[0] - npcPosition[0];
-      const directionZ = newTargetPosition[2] - npcPosition[2];
-      
-      // Normalize direction
-      const length = Math.sqrt(directionX * directionX + directionZ * directionZ);
-      if (length > 0) {
-        newMoveDirection.set(directionX / length, 0, directionZ / length);
-      }
-      
-      set({ 
-        npcTargetPosition: newTargetPosition,
-        npcWanderTimer: newTimer,
-        npcMoveDirection: newMoveDirection
-      });
-    } else {
-      // Gradually adjust direction toward target for smooth turning
-      const targetDirX = npcTargetPosition[0] - npcPosition[0];
-      const targetDirZ = npcTargetPosition[2] - npcPosition[2];
-      
-      // Normalize target direction
-      const targetLength = Math.sqrt(targetDirX * targetDirX + targetDirZ * targetDirZ);
-      
-      if (targetLength > 0) {
-        const normalizedTargetX = targetDirX / targetLength;
-        const normalizedTargetZ = targetDirZ / targetLength;
-        
-        // Smoothly adjust direction
-        newMoveDirection.x = THREE.MathUtils.lerp(
-          npcMoveDirection.x, 
-          normalizedTargetX, 
-          NPC_ROTATION_SPEED
-        );
-        
-        newMoveDirection.z = THREE.MathUtils.lerp(
-          npcMoveDirection.z, 
-          normalizedTargetZ, 
-          NPC_ROTATION_SPEED
-        );
-        
-        // Renormalize
-        const newLength = Math.sqrt(newMoveDirection.x * newMoveDirection.x + newMoveDirection.z * newMoveDirection.z);
-        if (newLength > 0) {
-          newMoveDirection.x /= newLength;
-          newMoveDirection.z /= newLength;
-        }
-        
-        set({ npcMoveDirection: newMoveDirection, npcWanderTimer: newWanderTimer });
-      }
+    // Update wander timer and set new target if needed
+    const newTimer = npcWanderTimer - 1;
+    if (newTimer <= 0) {
+      get().setNewNpcTarget();
+      set({ npcWanderTimer: Math.random() * 100 + 100 }); // 100-200 frames
+      return;
     }
     
-    // Move toward target
-    const newX = npcPosition[0] + newMoveDirection.x * NPC_SPEED * delta;
-    const newZ = npcPosition[2] + newMoveDirection.z * NPC_SPEED * delta;
+    // Calculate direction to target
+    const targetVector = new THREE.Vector3(
+      npcTarget[0] - npcPosition[0],
+      0,
+      npcTarget[2] - npcPosition[2]
+    );
     
-    // Check if the new position is within the hexagon boundary
-    const distanceFromCenter = Math.sqrt(newX * newX + newZ * newZ);
+    // If close to target, slow down
+    const distanceToTarget = targetVector.length();
+    if (distanceToTarget < 0.2) {
+      set({ 
+        npcMoveDirection: new THREE.Vector3(0, 0, 0),
+        npcWanderTimer: Math.random() * 50 + 50 // Shorter pause at destination
+      });
+      return;
+    }
     
-    // Add a small margin to prevent getting too close to the edge
-    const safeRadius = PLATFORM_RADIUS - 0.3;
+    // Update direction
+    targetVector.normalize();
+    set({ npcMoveDirection: targetVector });
     
-    if (distanceFromCenter <= safeRadius) {
-      // Only update if within bounds
+    // Move towards target
+    const speed = MOVEMENT_SPEED * 0.7; // NPC moves slightly slower
+    const newX = npcPosition[0] + targetVector.x * speed;
+    const newZ = npcPosition[2] + targetVector.z * speed;
+    
+    // Check if new position is within bounds
+    if (isWithinHexagon(newX, newZ, PLATFORM_RADIUS)) {
       set({ npcPosition: [newX, npcPosition[1], newZ] });
     } else {
-      // Slide along the boundary and pick a new target toward the center
-      const angle = Math.atan2(newZ, newX);
-      const boundaryX = safeRadius * Math.cos(angle);
-      const boundaryZ = safeRadius * Math.sin(angle);
-      
-      // Set new target position toward center
-      set({ 
-        npcPosition: [boundaryX, npcPosition[1], boundaryZ],
-        npcTargetPosition: [0, 0, 0], // Center of platform
-        npcWanderTimer: 0 // Force new target calculation next frame
-      });
+      // If outside bounds, get a new target
+      get().setNewNpcTarget();
     }
+    
+    // Check for collision with player
+    get().checkCollision();
   },
   
-  handleKeyDown: (event: KeyboardEvent) => {
-    const { moveDirection } = get();
-    const newDirection = moveDirection.clone();
-
-    // Update strafing state
-    if (event.key === 'Shift') {
-      set({ isStrafing: true });
-      return;
-    }
-
-    switch (event.key) {
-      case 'ArrowUp':
-      case 'w':
-      case 'W':
-        newDirection.z = -1; // Forward (negative Z)
-        break;
-      case 'ArrowDown':
-      case 's':
-      case 'S':
-        newDirection.z = 1; // Backward (positive Z)
-        break;
-      case 'ArrowLeft':
-      case 'a':
-      case 'A':
-        newDirection.x = -1; // Left (negative X)
-        break;
-      case 'ArrowRight':
-      case 'd':
-      case 'D':
-        newDirection.x = 1; // Right (positive X)
-        break;
-    }
-
-    set({ moveDirection: newDirection });
+  // Set a new random target for the NPC
+  setNewNpcTarget: () => {
+    // Random angle and distance within the platform
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * PLATFORM_RADIUS * 0.8;
+    
+    // Calculate new target position
+    const newX = Math.cos(angle) * distance;
+    const newZ = Math.sin(angle) * distance;
+    
+    set({ npcTarget: [newX, 0, newZ] });
   },
-
-  handleKeyUp: (event: KeyboardEvent) => {
-    const { moveDirection } = get();
-    const newDirection = moveDirection.clone();
-
-    // Update strafing state
-    if (event.key === 'Shift') {
-      set({ isStrafing: false });
-      return;
+  
+  // Check for collision between player and NPC
+  checkCollision: () => {
+    const { playerPosition, npcPosition, isColliding } = get();
+    
+    // Skip if already in collision
+    if (isColliding) return;
+    
+    // Calculate distance between player and NPC
+    const playerPos = new THREE.Vector3(playerPosition[0], playerPosition[1], playerPosition[2]);
+    const npcPos = new THREE.Vector3(npcPosition[0], npcPosition[1], npcPosition[2]);
+    const distance = playerPos.distanceTo(npcPos);
+    
+    // Check if collision occurs
+    if (distance < COLLISION_DISTANCE) {
+      // Calculate collision point (midpoint between characters)
+      const collisionPoint: [number, number, number] = [
+        (playerPosition[0] + npcPosition[0]) / 2,
+        (playerPosition[1] + npcPosition[1]) / 2,
+        (playerPosition[2] + npcPosition[2]) / 2
+      ];
+      
+      // Calculate knockback directions
+      const knockbackDirPlayer = new THREE.Vector3()
+        .subVectors(playerPos, npcPos)
+        .normalize()
+        .multiplyScalar(COLLISION_KNOCKBACK);
+      
+      const knockbackDirNpc = new THREE.Vector3()
+        .subVectors(npcPos, playerPos)
+        .normalize()
+        .multiplyScalar(COLLISION_KNOCKBACK);
+      
+      // Apply knockback
+      const newPlayerPos: [number, number, number] = [
+        playerPosition[0] + knockbackDirPlayer.x,
+        playerPosition[1],
+        playerPosition[2] + knockbackDirPlayer.z
+      ];
+      
+      const newNpcPos: [number, number, number] = [
+        npcPosition[0] + knockbackDirNpc.x,
+        npcPosition[1],
+        npcPosition[2] + knockbackDirNpc.z
+      ];
+      
+      // Update state with collision info
+      set({
+        isColliding: true,
+        collisionTime: Date.now(),
+        collisionPosition: collisionPoint,
+        playerPosition: newPlayerPos,
+        npcPosition: newNpcPos
+      });
+      
+      // Reset collision state after animation duration
+      setTimeout(() => {
+        set({ isColliding: false });
+      }, COLLISION_DURATION);
     }
-
-    switch (event.key) {
-      case 'ArrowUp':
-      case 'ArrowDown':
-      case 'w':
-      case 'W':
-      case 's':
-      case 'S':
-        newDirection.z = 0;
-        break;
-      case 'ArrowLeft':
-      case 'ArrowRight':
-      case 'a':
-      case 'A':
-      case 'd':
-      case 'D':
-        newDirection.x = 0;
-        break;
-    }
-
-    set({ moveDirection: newDirection });
-  },
+  }
 }));
