@@ -8,10 +8,10 @@ html, body {
   overflow: hidden;
   height: 100%;
   width: 100%;
-}
-
-canvas {
-  display: block;
+  position: fixed;
+  touch-action: none; /* Prevent browser from handling touch events */
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+  overscroll-behavior: none; /* Prevent pull-to-refresh on mobile */
 }
 
 /* Setting up proper stacking context */

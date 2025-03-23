@@ -11,7 +11,16 @@ export default function RetroTV() {
   
   // Scale the TV to be twice as big
   useEffect(() => {
-    scene.scale.set(2, 2, 2);
+    try {
+      if (scene) {
+        console.log('TV model loaded successfully');
+        scene.scale.set(2, 2, 2);
+      } else {
+        console.error('TV model scene is undefined');
+      }
+    } catch (error) {
+      console.error('Error scaling TV model:', error);
+    }
   }, [scene]);
   
   // Apply the texture to any potential screen surface

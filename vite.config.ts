@@ -26,12 +26,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-      },
-      output: {
-        manualChunks: {
-          'models': ['./public/models'],
-          'sprites': ['./public/sprites']
-        }
       }
     },
   },

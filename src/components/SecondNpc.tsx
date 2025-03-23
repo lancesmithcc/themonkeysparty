@@ -1,215 +1,720 @@
-import { useEffect, useRef, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
-import * as THREE from 'three'
-import { useGameStore } from '../store/gameStore'
+import { useRef, useEffect, useMemo } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { useGLTF, useAnimations, Html } from '@react-three/drei';
+import * as THREE from 'three';
+import { useGameStore } from '../store/gameStore';
+import '@fontsource/press-start-2p';
 
-// Updated model path
-const MODEL_URL = '/models/eldara.glb'
+// Using the existing robob model as a fallback since anuki.glb doesn't exist
+const MODEL_URL = '/models/eldara.glb';
+
+// Same aura shader as Player but with different color
+const auraShader = {
+  uniforms: {
+    time: { value: 0 },
+    color: { value: new THREE.Color('#F8E5FF') }, // Soft lavender color
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    uniform float time;
+    
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      vNormal = normal;
+      
+      // More subtle movement animation
+      vec3 pos = position;
+      float movement = sin(time * 2.0 + position.y * 3.0) * 0.005;
+      pos += normal * movement;
+      
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 color;
+    uniform float time;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    
+    void main() {
+      // Gentler pulsing effect
+      float pulse = sin(time * 1.5) * 0.1 + 0.9;
+      
+      // Sharper vertical gradient
+      float verticalGradient = pow(1.0 - abs(vPosition.y), 1.5);
+      
+      // Tighter radial gradient
+      vec2 center = vec2(0.5, 0.5);
+      float dist = length(vUv - center) * 2.5; // Increased for tighter falloff
+      float radialGradient = 1.0 - smoothstep(0.0, 0.8, dist);
+      
+      // Combine gradients with more weight on radial
+      float gradient = mix(verticalGradient, radialGradient, 0.7);
+      
+      // Sharper edge glow
+      float edgeGlow = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
+      
+      // Finer noise for texture
+      float noise = fract(sin(dot(vUv, vec2(12.9898, 78.233)) + time) * 43758.5453) * 0.05;
+      
+      // Combine all effects with tighter alpha falloff
+      float alpha = gradient * pulse * (0.15 + edgeGlow * 0.25) * (0.95 + noise);
+      vec3 finalColor = mix(color, vec3(1.0), edgeGlow * 0.2 + noise);
+      
+      // Sharper alpha falloff
+      alpha = pow(alpha, 1.5);
+      
+      gl_FragColor = vec4(finalColor, alpha * 0.5);
+    }
+  `
+};
+
+// Create purple state shader similar to the Player component
+const purpleStateShader = {
+  uniforms: {
+    time: { value: 0 },
+    purpleColor: { value: new THREE.Color('#C000FF') }, // Deep purple
+    pinkColor: { value: new THREE.Color('#FF69B4') },   // Hot pink
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    uniform float time;
+    
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      vNormal = normal;
+      
+      // Pulsating movement animation
+      vec3 pos = position;
+      float movement = sin(time * 4.0 + position.y * 3.0) * 0.01;
+      pos += normal * movement;
+      
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 purpleColor;
+    uniform vec3 pinkColor;
+    uniform float time;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    
+    void main() {
+      // Fast flashing effect between purple and pink
+      float flash = sin(time * 10.0) * 0.5 + 0.5;
+      
+      // Edge glow effect
+      float edgeGlow = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+      
+      // Mix between purple and pink based on flash value
+      vec3 finalColor = mix(purpleColor, pinkColor, flash);
+      
+      // Increase glow intensity at edges
+      finalColor = mix(finalColor, vec3(1.0, 0.5, 1.0), edgeGlow * 0.5);
+      
+      // Pulsating alpha
+      float alpha = 0.7 + sin(time * 8.0) * 0.3;
+      
+      gl_FragColor = vec4(finalColor, alpha * 0.8);
+    }
+  `
+};
+
+// Add a melting puddle shader
+const meltingPuddleShader = {
+  uniforms: {
+    time: { value: 0 },
+    progress: { value: 0 },
+    color: { value: new THREE.Color('#FF3333') }, // Red puddle color
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    uniform float progress;
+    
+    void main() {
+      vUv = uv;
+      
+      // Flatten the mesh based on progress
+      vec3 pos = position;
+      pos.y *= (1.0 - progress * 0.95);
+      
+      // Spread outward as it flattens
+      vec2 offset = (uv - 0.5) * 2.0;
+      float spread = progress * 1.5;
+      pos.xz += offset * spread;
+      
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 color;
+    uniform float time;
+    uniform float progress;
+    varying vec2 vUv;
+    
+    void main() {
+      // Calculate distance from center for a radial gradient
+      vec2 center = vec2(0.5, 0.5);
+      float dist = length(vUv - center);
+      
+      // Create a pulsating effect
+      float pulse = sin(time * 3.0 + dist * 5.0) * 0.1 + 0.9;
+      
+      // Edge glow effect
+      float edgeGlow = smoothstep(0.0, 0.5, dist) * (1.0 - smoothstep(0.5, 1.0, dist));
+      
+      // Make the puddle more transparent at the edges
+      float alpha = (1.0 - dist * 0.8) * progress;
+      
+      // Make the puddle "bubbling" with noise
+      float noise = fract(sin(dot(vUv, vec2(12.9898, 78.233)) * time) * 43758.5453);
+      float bubbles = step(0.7 - progress * 0.3, noise) * step(dist, 0.9);
+      
+      // Final color with bubbling effect
+      vec3 finalColor = mix(color, vec3(1.0, 0.5, 0.5), bubbles * pulse);
+      
+      gl_FragColor = vec4(finalColor, alpha);
+    }
+  `
+};
 
 export default function SecondNpc() {
-  const { secondNpcPosition, secondNpcRotation, shouldSecondNpcMove } = useGameStore()
-  const modelRef = useRef<THREE.Group>()
-  const headRef = useRef<THREE.Bone>()
-  const leftArmRef = useRef<THREE.Bone>()
-  const rightArmRef = useRef<THREE.Bone>()
-  const leftLegRef = useRef<THREE.Bone>()
-  const rightLegRef = useRef<THREE.Bone>()
+  const ref = useRef<THREE.Group>(null);
+  const auraRef = useRef<THREE.Mesh>(null);
+  const purpleAuraRef = useRef<THREE.Mesh>(null);
+  const puddleRef = useRef<THREE.Mesh>(null);
+  const { scene, animations } = useGLTF(MODEL_URL);
+  const { actions } = useAnimations(animations, ref);
   
-  // Track last position for movement detection
-  const lastPositionRef = useRef(new THREE.Vector3(...secondNpcPosition))
-  const rotationRef = useRef(new THREE.Euler(
-    secondNpcRotation[0], 
-    secondNpcRotation[1], 
-    secondNpcRotation[2]
-  ))
+  const { secondNpcPosition, secondNpcRotation, updateSecondNpcPosition, secondNpcScore, isSecondNpcPurple, isSecondNpcHit, secondNpcMelted, secondNpcMeltProgress } = useGameStore(state => ({
+    secondNpcPosition: state.secondNpcPosition,
+    secondNpcRotation: state.secondNpcRotation,
+    updateSecondNpcPosition: state.updateSecondNpcPosition,
+    secondNpcScore: state.secondNpcScore,
+    isSecondNpcPurple: state.isSecondNpcPurple,
+    isSecondNpcHit: state.isSecondNpcHit,
+    secondNpcMelted: state.secondNpcMelted,
+    secondNpcMeltProgress: state.secondNpcMeltProgress
+  }));
+
+  // Clone the scene to avoid conflicts with Player component
+  const npcScene = useMemo(() => scene.clone(), [scene]);
   
-  // Animation state
-  const isMovingRef = useRef(false)
-  const animTimeRef = useRef(0)
-  const personalityFactorRef = useRef(Math.random() * 0.4 + 0.8) // Randomize personality
-  
-  // Load the model
-  const { scene, animations } = useGLTF(MODEL_URL) as any
-  
-  // Clone the scene to avoid conflicts
-  const npcScene = useMemo(() => {
-    const clone = scene.clone(true)
-    clone.scale.set(0.8, 0.8, 0.8) // Scale the model
-    clone.traverse((node: THREE.Object3D) => {
-      if (node instanceof THREE.Mesh) {
-        node.castShadow = true
-        node.receiveShadow = true
-      }
-    })
-    return clone
-  }, [scene])
-  
-  // Setup references to bones
+  // Scale the model appropriately
   useEffect(() => {
-    if (!modelRef.current) return
-    
-    // Log available bones for debugging
-    console.log('NPC bones:', modelRef.current)
-    
-    // Find and reference important bones
-    modelRef.current.traverse((node: THREE.Object3D) => {
-      if (node instanceof THREE.Bone) {
-        const name = node.name.toLowerCase()
-        if (name.includes('head')) headRef.current = node
-        if (name.includes('leftarm') || name.includes('arm_l')) leftArmRef.current = node
-        if (name.includes('rightarm') || name.includes('arm_r')) rightArmRef.current = node
-        if (name.includes('leftleg') || name.includes('leg_l')) leftLegRef.current = node
-        if (name.includes('rightleg') || name.includes('leg_r')) rightLegRef.current = node
-      }
-    })
-    
-    // Log found bones
-    console.log('Found bones:', {
-      head: headRef.current,
-      leftArm: leftArmRef.current,
-      rightArm: rightArmRef.current,
-      leftLeg: leftLegRef.current,
-      rightLeg: rightLegRef.current
-    })
-  }, [modelRef.current])
-  
-  // Setup initial rotation
+    npcScene.scale.set(0.7, 0.7, 0.7);
+  }, [npcScene]);
+
+  // Set initial rotation
   useEffect(() => {
-    if (modelRef.current) {
-      rotationRef.current.set(
-        secondNpcRotation[0],
-        secondNpcRotation[1],
-        secondNpcRotation[2]
-      )
-      modelRef.current.rotation.copy(rotationRef.current)
-    }
-  }, [])
-  
-  // Log available animations
-  useEffect(() => {
-    if (animations?.length) {
-      console.log('NPC animations:', animations.map((a: any) => a.name))
-    }
-  }, [animations])
-  
-  // Update position and animate in each frame
-  useFrame((_, delta) => {
-    if (!modelRef.current) return
-    
-    // Check if NPC is moving by comparing positions
-    const currentPosition = new THREE.Vector3(...secondNpcPosition)
-    const distance = currentPosition.distanceTo(lastPositionRef.current)
-    isMovingRef.current = distance > 0.0001 && shouldSecondNpcMove
-    
-    // Update animation time
-    animTimeRef.current += delta * (isMovingRef.current ? 2 : 0.5)
-    
-    // Update model position with smooth transitions
-    modelRef.current.position.lerp(
-      new THREE.Vector3(...secondNpcPosition),
-      delta * 5
-    )
-    
-    // Update rotation with smooth transition and slight overshoot
-    const targetRotation = new THREE.Euler(
-      secondNpcRotation[0],
-      secondNpcRotation[1],
-      secondNpcRotation[2]
-    )
-    
-    rotationRef.current.x = THREE.MathUtils.lerp(
-      rotationRef.current.x, 
-      targetRotation.x, 
-      delta * 3
-    )
-    
-    rotationRef.current.y = THREE.MathUtils.lerp(
-      rotationRef.current.y, 
-      targetRotation.y, 
-      delta * 3
-    )
-    
-    rotationRef.current.z = THREE.MathUtils.lerp(
-      rotationRef.current.z, 
-      targetRotation.z, 
-      delta * 3
-    )
-    
-    // Apply rotation to model
-    modelRef.current.rotation.copy(rotationRef.current)
-    
-    // Apply bobbing and swaying for more natural movement
-    if (isMovingRef.current) {
-      // Walking movement - bobbing up and down
-      const bobHeight = Math.sin(animTimeRef.current * 8) * 0.05
-      modelRef.current.position.y += bobHeight
-      
-      // Add some lateral swagger (side-to-side sway)
-      const swayAmount = Math.sin(animTimeRef.current * 4) * 0.03 * personalityFactorRef.current
-      modelRef.current.position.x += swayAmount
-      modelRef.current.position.z += swayAmount
-    } else {
-      // Subtle idle motion - gentle up/down breathing
-      const idleBob = Math.sin(animTimeRef.current * 2) * 0.01
-      modelRef.current.position.y += idleBob
+    if (ref.current) {
+      ref.current.rotation.y = 0;
     }
     
-    // Animate bones if they exist
-    if (isMovingRef.current) {
-      // Walking animations
-      if (leftArmRef.current && rightArmRef.current) {
-        // Arm swings
-        const armSwing = Math.sin(animTimeRef.current * 8) * 0.3 * personalityFactorRef.current
-        leftArmRef.current.rotation.x = -armSwing
-        rightArmRef.current.rotation.x = armSwing
-      }
+    // Log available animations for debugging
+    console.log("Second NPC available animations:", Object.keys(actions));
+  }, []);
+
+  // Helper to check if there's rotation (for animation triggering)
+  const isMoving = useMemo(() => {
+    // Check if any rotation component is non-zero
+    return Math.abs(secondNpcRotation[0]) > 0.01 || 
+           Math.abs(secondNpcRotation[1]) > 0.01 || 
+           Math.abs(secondNpcRotation[2]) > 0.01;
+  }, [secondNpcRotation]);
+
+  // Handle animations based on movement
+  useEffect(() => {
+    // Reset all animations
+    Object.values(actions).forEach(action => action?.stop());
+
+    // Play animation based on whether NPC is moving
+    if (isMoving) {
+      // Get all available animations
+      const availableAnims = Object.keys(actions);
       
-      if (leftLegRef.current && rightLegRef.current) {
-        // Leg swings - opposite phase from arms
-        const legSwing = Math.sin(animTimeRef.current * 8) * 0.3 * personalityFactorRef.current
-        leftLegRef.current.rotation.x = legSwing
-        rightLegRef.current.rotation.x = -legSwing
-      }
+      // Try to find appropriate animation names
+      const movementAnims = availableAnims.filter(name => 
+        name.toLowerCase().includes('walk') || 
+        name.toLowerCase().includes('run') || 
+        name.toLowerCase().includes('move')
+      );
       
-      if (headRef.current) {
-        // Head bobbing while walking
-        const headBob = Math.sin(animTimeRef.current * 8) * 0.05
-        headRef.current.rotation.x = headBob
-        headRef.current.rotation.z = Math.sin(animTimeRef.current * 4) * 0.03
+      // If we found any movement animations, use the first one
+      if (movementAnims.length > 0) {
+        const animName = movementAnims[0];
+        console.log(`Second NPC using movement animation: ${animName}`);
+        actions[animName]?.play();
+        actions[animName]?.setEffectiveTimeScale(0.6); // Slightly slower animation
+      } else if (availableAnims.length > 0) {
+        // Just use the first available animation if nothing specific found
+        const firstAnim = availableAnims[0];
+        console.log(`No specific Second NPC movement animation found. Using: ${firstAnim}`);
+        actions[firstAnim]?.play();
       }
     } else {
-      // Idle animations - subtle movements
-      if (leftArmRef.current && rightArmRef.current) {
-        // Subtle arm movement during idle
-        const idleArmMove = Math.sin(animTimeRef.current * 2) * 0.05
-        leftArmRef.current.rotation.x = idleArmMove
-        rightArmRef.current.rotation.x = idleArmMove * 0.7 // Asymmetric for more natural look
-      }
+      // For idle state, find an idle animation or use the first available
+      const availableAnims = Object.keys(actions);
       
-      if (headRef.current) {
-        // Occasional subtle head movements
-        const headTilt = Math.sin(animTimeRef.current * 0.5) * 0.1
-        headRef.current.rotation.z = Math.sin(animTimeRef.current * 0.3) * 0.03
-        headRef.current.rotation.x = Math.cos(animTimeRef.current * 0.7) * 0.02
+      const idleAnims = availableAnims.filter(name =>
+        name.toLowerCase().includes('idle') ||
+        name.toLowerCase().includes('stand') ||
+        name.toLowerCase().includes('pose')
+      );
+      
+      if (idleAnims.length > 0) {
+        const animName = idleAnims[0];
+        console.log(`Second NPC using idle animation: ${animName}`);
+        actions[animName]?.play();
+      } else if (availableAnims.length > 0) {
+        // Just use the first available animation for idle
+        const firstAnim = availableAnims[0];
+        console.log(`No specific Second NPC idle animation found. Using: ${firstAnim}`);
+        actions[firstAnim]?.play();
+      }
+    }
+  }, [actions, isMoving]);
+
+  // Save original materials when we first apply purple effect
+  const originalMaterials = useRef<{[key: string]: THREE.Material}>({});
+  const materialsStored = useRef<boolean>(false);
+  const originalScale = useRef<[number, number, number]>([1, 1, 1]);
+  
+  // Store original materials to restore later
+  const storeOriginalMaterials = () => {
+    if (ref.current && !materialsStored.current) {
+      ref.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const key = child.uuid;
+          originalMaterials.current[key] = child.material.clone();
+        }
+      });
+      materialsStored.current = true;
+    }
+  };
+  
+  // Restore original materials
+  const restoreOriginalMaterials = () => {
+    if (ref.current && materialsStored.current) {
+      ref.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const key = child.uuid;
+          if (originalMaterials.current[key]) {
+            child.material = originalMaterials.current[key].clone();
+          }
+        }
+      });
+    }
+  };
+
+  // Animation and movement in each frame
+  useFrame((state, delta) => {
+    // Update NPC position through the store
+    updateSecondNpcPosition();
+    
+    // Ensure reference exists
+    if (!ref.current) return;
+    
+    // Apply position from store
+    ref.current.position.set(secondNpcPosition[0], secondNpcPosition[1], secondNpcPosition[2]);
+    
+    // Apply rotation from store if provided
+    if (secondNpcRotation) {
+      ref.current.rotation.set(secondNpcRotation[0], secondNpcRotation[1], secondNpcRotation[2]);
+    }
+    
+    // Update aura time uniform
+    if (auraRef.current) {
+      const material = auraRef.current.material as THREE.ShaderMaterial;
+      material.uniforms.time.value = state.clock.getElapsedTime();
+      
+      // Hide aura when Second NPC is melted
+      auraRef.current.visible = !secondNpcMelted;
+    }
+    
+    // Update purple aura when active
+    if (purpleAuraRef.current) {
+      const material = purpleAuraRef.current.material as THREE.ShaderMaterial;
+      material.uniforms.time.value = state.clock.getElapsedTime();
+      
+      // Toggle visibility based on purple state and not melted
+      purpleAuraRef.current.visible = isSecondNpcPurple && !secondNpcMelted;
+    }
+    
+    // Update puddle animation when melting
+    if (puddleRef.current) {
+      const material = puddleRef.current.material as THREE.ShaderMaterial;
+      material.uniforms.time.value = state.clock.getElapsedTime();
+      material.uniforms.progress.value = secondNpcMeltProgress;
+      
+      // Show puddle only when melting
+      puddleRef.current.visible = secondNpcMelted;
+    }
+    
+    // Handle melting animation for the model
+    if (secondNpcMelted) {
+      // Gradually scale down the model in Y axis (shrinking)
+      const yScale = Math.max(0.05, 1 - secondNpcMeltProgress * 0.95);
+      
+      // Spread out a bit in X and Z as it melts
+      const xzScale = 1 + secondNpcMeltProgress * 0.3;
+      
+      // Apply scale
+      ref.current.scale.set(
+        0.7 * xzScale,  // Original scale is 0.7
+        0.7 * yScale,
+        0.7 * xzScale
+      );
+      
+      // Move down as it melts to stay on ground
+      const meltOffset = secondNpcMeltProgress * 0.6; // How far down it moves
+      ref.current.position.y = secondNpcPosition[1] - 0.2 - meltOffset;
+      
+      // Apply red melting effect to materials
+      ref.current.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.material) {
+          // Skip the aura and puddle meshes
+          if (object === auraRef.current || object === purpleAuraRef.current || object === puddleRef.current) return;
+          
+          // Store original materials if not already stored
+          storeOriginalMaterials();
+          
+          // Apply red melting effect to materials
+          if (object.material instanceof THREE.MeshStandardMaterial) {
+            object.material.emissive.set(1, 0, 0);
+            object.material.emissiveIntensity = 0.5 + secondNpcMeltProgress * 0.5;
+            object.material.color.setRGB(1, 0, 0);
+          } else if (object.material instanceof THREE.MeshBasicMaterial ||
+                     object.material instanceof THREE.MeshLambertMaterial ||
+                     object.material instanceof THREE.MeshPhongMaterial) {
+            object.material.color.setRGB(1, 0, 0);
+          }
+        }
+      });
+      
+      // Skip all other visual effects when melting
+      return;
+    } else {
+      // Reset scale if not melted
+      if (ref.current && !isSecondNpcHit) {
+        ref.current.scale.set(0.7, 0.7, 0.7);
       }
     }
     
-    // Store current position for next frame comparison
-    lastPositionRef.current.copy(currentPosition)
-  })
-  
+    // Handle purple state effects
+    if (isSecondNpcPurple) {
+      // Store original materials for later restoration
+      storeOriginalMaterials();
+      
+      // Apply purple material or effect to the character
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh && 
+            object !== auraRef.current && 
+            object !== purpleAuraRef.current &&
+            object !== puddleRef.current) {
+          if (object.material) {
+            // Apply emissive purple color
+            if (Array.isArray(object.material)) {
+              object.material.forEach(mat => {
+                if (mat.emissive) {
+                  mat.emissive.set(0x8000ff);
+                  mat.emissiveIntensity = 0.5;
+                }
+              });
+            } else if (object.material.emissive) {
+              object.material.emissive.set(0x8000ff);
+              object.material.emissiveIntensity = 0.5;
+            }
+          }
+        }
+      });
+    } else {
+      // Restore original materials when not in purple state
+      restoreOriginalMaterials();
+    }
+    
+    // Manual bone animation for limbs if available
+    const time = state.clock.getElapsedTime();
+    ref.current.traverse((object) => {
+      if (object instanceof THREE.Bone) {
+        // Apply manual animations to specific bones by name pattern
+        const name = object.name.toLowerCase();
+        
+        // Animated limbs for movement
+        if (isMoving) {
+          // Arms with more mystical, elegant movements
+          if (name.includes('arm') || name.includes('hand')) {
+            const baseSwing = Math.sin(time * 5) * 0.3;
+            const flowFactor = Math.sin(time * 3.2) * 0.08; // Add flowing, graceful motion
+            
+            // Swing arms with elegant, flowing style
+            if (name.includes('right')) {
+              object.rotation.x = baseSwing * 0.9 + flowFactor; // Slightly restrained
+              // Add rotation in other axes for flowing movement
+              object.rotation.y = Math.sin(time * 2.7) * 0.1;
+              object.rotation.z = Math.sin(time * 2.2) * 0.12;
+            } else if (name.includes('left')) {
+              object.rotation.x = -baseSwing + flowFactor; // Regular swing plus flow
+              // Add rotation in other axes for flowing movement
+              object.rotation.y = Math.sin(time * 2.9) * 0.1;
+              object.rotation.z = Math.sin(time * 2.5) * 0.12;
+            }
+            
+            // Add more graceful motion for hands specifically
+            if (name.includes('hand')) {
+              object.rotation.z += Math.sin(time * 4) * 0.15;
+            }
+          }
+          
+          // Legs with more graceful gait
+          if (name.includes('leg') || name.includes('foot')) {
+            const baseSwing = Math.sin(time * 5) * 0.3;
+            const flowFactor = Math.cos(time * 2.5) * 0.05; // Different phase for grace
+            
+            // Swing legs with more elegant movement
+            if (name.includes('right')) {
+              object.rotation.x = -baseSwing + flowFactor;
+              // Add slight rotation for dancer-like quality
+              object.rotation.y = Math.sin(time * 2.1) * 0.05;
+              object.rotation.z = Math.cos(time * 1.8) * 0.03;
+            } else if (name.includes('left')) {
+              object.rotation.x = baseSwing + flowFactor;
+              // Add slight rotation for dancer-like quality
+              object.rotation.y = Math.sin(time * 2.3) * 0.05;
+              object.rotation.z = Math.cos(time * 1.9) * 0.03;
+            }
+            
+            // Add more graceful foot motion
+            if (name.includes('foot')) {
+              object.rotation.x += Math.sin(time * 8) * 0.08; // Elegant toe-pointing
+            }
+          }
+          
+          // Add subtle head movement if head bones exist
+          if (name.includes('head') || name.includes('neck')) {
+            // Look around slightly while walking with confidence
+            object.rotation.y = Math.sin(time * 1.5) * 0.08;
+            // Slight proud posture
+            object.rotation.x = Math.sin(time * 2.5) * 0.03 - 0.05; // Slight upward tilt
+          }
+        } else {
+          // Subtle idle motions with magical elegance
+          if (name.includes('arm') || name.includes('hand')) {
+            // Mystical gestures and subtle movements
+            const breatheBase = Math.sin(time * 1.2) * 0.04;
+            const magical = Math.sin(time * 1.8) * 0.06;
+            object.rotation.x = breatheBase;
+            
+            // More pronounced hand gestures when idle
+            if (name.includes('hand')) {
+              object.rotation.y = Math.sin(time * 1.1) * 0.08;
+              object.rotation.z = Math.sin(time * 0.9) * 0.1 + magical;
+            } else {
+              object.rotation.y = Math.sin(time * 0.8) * 0.04;
+              object.rotation.z = Math.sin(time * 1.3) * 0.05;
+            }
+          }
+          
+          // Subtle leg movement while idle - poised stance
+          if (name.includes('leg') || name.includes('foot')) {
+            // Slight weight shifting with elegance
+            object.rotation.x = Math.sin(time * 0.9) * 0.03;
+            object.rotation.z = Math.sin(time * 0.7) * 0.02;
+            
+            // Add slight foot motion - regal posture
+            if (name.includes('foot')) {
+              object.rotation.x += Math.sin(time * 1.4) * 0.04;
+            }
+          }
+          
+          // Add idle head movement - observant and mystical
+          if (name.includes('head') || name.includes('neck')) {
+            // Observant looking around
+            object.rotation.y = Math.sin(time * 0.6) * 0.12;
+            // Slight curious tilting with wisdom
+            object.rotation.z = Math.sin(time * 0.8) * 0.04;
+            // Slight nod occasionally
+            object.rotation.x = Math.sin(time * 0.3) * 0.03;
+          }
+        }
+      }
+    });
+    
+    // Update visual position and animation effects
+    if (isMoving) {
+      // Enhanced movement animation with graceful bobbing
+      const primaryBob = Math.sin(time * 7) * 0.07;
+      const secondaryBob = Math.sin(time * 4.5) * 0.03; // Secondary frequency for flowing motion
+      const bobHeight = primaryBob + secondaryBob;
+      
+      // Add slight lateral movement for graceful gait
+      const lateralGrace = Math.sin(time * 3.5) * 0.03;
+      
+      // Position the NPC with grace and enhanced bobbing
+      ref.current.position.set(
+        secondNpcPosition[0] + lateralGrace,
+        secondNpcPosition[1] - 0.20 + bobHeight,
+        secondNpcPosition[2]
+      );
+      
+      // Rotate NPC to face movement direction (using y rotation)
+      const angle = Math.atan2(secondNpcRotation[0], secondNpcRotation[2]);
+      
+      // Smoother rotation transition with slight magical flair
+      ref.current.rotation.y = THREE.MathUtils.lerp(
+        ref.current.rotation.y,
+        angle + Math.sin(time * 2) * 0.04, // Add slight mystical turning
+        0.1
+      );
+      
+      // Enhanced movement style effects
+      // Elegant rocking (z-axis)
+      const baseRockAngle = Math.sin(time * 5) * 0.04;
+      const grace = Math.sin(time * 2.2) * 0.02; // Add flowing motion
+      const rockAngle = baseRockAngle + grace;
+      ref.current.rotation.z = rockAngle;
+      
+      // Forward/backward lean (x-axis) for dynamic movement
+      // Add slight forward lean for elegant walking stance
+      const baseLean = Math.sin(time * 3) * 0.02; 
+      const forwardLean = baseLean + 0.03; // Slight forward lean for poise
+      ref.current.rotation.x = forwardLean;
+      
+      // Slight bounce in rotation for more grace
+      const bounce = Math.abs(Math.sin(time * 6)) * 0.01;
+      ref.current.rotation.x += bounce;
+    } else {
+      // Improved idle animation
+      // Static position when not moving, with correct ground adjustment and subtle mystical floating
+      ref.current.position.set(
+        secondNpcPosition[0],
+        secondNpcPosition[1] - 0.20 + Math.sin(time * 1.2) * 0.03, // Subtle magical floating
+        secondNpcPosition[2]
+      );
+      
+      // Enhanced idle motion with magical presence
+      const primaryRock = Math.sin(time * 1.5) * 0.01;
+      const secondaryRock = Math.cos(time * 1.1) * 0.006; // Secondary subtle motion
+      const idleRock = primaryRock + secondaryRock;
+      ref.current.rotation.z = idleRock;
+      
+      // Subtle forward/backward sway while idle - magical poise
+      const idleSway = Math.sin(time * 1.3) * 0.01;
+      ref.current.rotation.x = idleSway - 0.01; // Slight upward tilt for regal stance
+    }
+    
+    // Add red flash and scale animation when hit
+    if (ref.current && isSecondNpcHit) {
+      // Store original scale if not stored
+      if (originalScale.current[0] === 1) {
+        originalScale.current = [
+          ref.current.scale.x,
+          ref.current.scale.y,
+          ref.current.scale.z
+        ];
+      }
+      
+      // Calculate hit animation progress (pulsating)
+      const hitPulse = Math.abs(Math.sin(time * 20)); // Fast pulsating
+      
+      // Apply red flash to materials
+      ref.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          // Skip aura meshes
+          if (child === auraRef.current || child === purpleAuraRef.current || child === puddleRef.current) return;
+          
+          // Apply red color flash
+          if (child.material instanceof THREE.MeshStandardMaterial) {
+            // Store original material if needed
+            storeOriginalMaterials();
+            
+            // Intense red emissive for hit effect
+            child.material.emissive.set(1, 0, 0);
+            child.material.emissiveIntensity = 1 + hitPulse;
+          } else if (child.material instanceof THREE.MeshBasicMaterial ||
+                     child.material instanceof THREE.MeshLambertMaterial ||
+                     child.material instanceof THREE.MeshPhongMaterial) {
+            // Store original material if needed
+            storeOriginalMaterials();
+            
+            // Flash between normal and red
+            child.material.color.setRGB(1, hitPulse * 0.5, hitPulse * 0.5);
+          }
+        }
+      });
+      
+      // Pulsating scale effect - shrink slightly when hit
+      const shrinkFactor = 0.8 + hitPulse * 0.2; // Shrink to 80% and pulse back up
+      ref.current.scale.set(
+        originalScale.current[0] * shrinkFactor,
+        originalScale.current[1] * shrinkFactor,
+        originalScale.current[2] * shrinkFactor
+      );
+    } else if (!isSecondNpcHit && originalScale.current[0] !== 1) {
+      // Restore original scale when hit animation ends
+      if (ref.current) {
+        ref.current.scale.set(
+          originalScale.current[0],
+          originalScale.current[1],
+          originalScale.current[2]
+        );
+      }
+      // Reset the scale marker
+      originalScale.current = [1, 1, 1];
+    }
+  });
+
   return (
-    <group>
-      <primitive 
-        ref={modelRef} 
-        object={npcScene} 
-        position={secondNpcPosition} 
-        rotation={[secondNpcRotation[0], secondNpcRotation[1], secondNpcRotation[2]]}
-      />
+    <group ref={ref} position={secondNpcPosition} rotation={[0, secondNpcRotation[1], 0]}>
+      <primitive object={npcScene} position={[0, 1, 0]} />
+      {/* Aura effect with different color than player */}
+      <mesh
+        ref={auraRef}
+        scale={[1.1, 1.6, 1.1]} 
+        position={[0, 1.8, 0]}
+      >
+        <sphereGeometry args={[0.9, 32, 32]} />
+        <shaderMaterial
+          {...auraShader}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Purple state aura effect - only visible when in purple state */}
+      <mesh ref={purpleAuraRef} scale={[1.15, 1.65, 1.15]} position={[0, 1.8, 0]} visible={isSecondNpcPurple}>
+        <sphereGeometry args={[0.8, 32, 32]} />
+        <shaderMaterial
+          attach="material"
+          args={[purpleStateShader]}
+          transparent={true}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Melting puddle effect - only visible when melted */}
+      <mesh ref={puddleRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} visible={secondNpcMelted}>
+        <circleGeometry args={[1.2, 32]} />
+        <shaderMaterial
+          attach="material"
+          args={[meltingPuddleShader]}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
-  )
+  );
 }
 
-// Preload the model
-useGLTF.preload(MODEL_URL) 
+// Pre-load the model
+useGLTF.preload(MODEL_URL); 

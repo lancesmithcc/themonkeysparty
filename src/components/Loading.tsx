@@ -1,7 +1,7 @@
 import { Html } from '@react-three/drei';
 import { useEffect, useState } from 'react';
 
-export function Loading() {
+export default function Loading() {
   const [dots, setDots] = useState('.');
   
   // Animate the loading dots

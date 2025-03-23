@@ -1,4 +1,5 @@
 import RetroTV from './RetroTV';
+import Stars from './Stars';
 import GeometricShapes from './GeometricShapes';
 import CrystalCluster from './CrystalCluster';
 import { useRef, useEffect } from 'react';
@@ -16,9 +17,18 @@ export default function Room() {
   
   // Scale the bonsai to be appropriate for the scene
   useEffect(() => {
-    bonsaiScene.scale.set(0.8, 0.8, 0.8);
-    bonsaiScene.position.set(0, 0.5, 0); // Raised higher above the floor
-    bonsaiScene.rotation.y = Math.PI / 6; // Add a slight rotation for aesthetics
+    if (bonsaiScene) {
+      try {
+        console.log("Bonsai model loaded successfully");
+        bonsaiScene.scale.set(0.8, 0.8, 0.8);
+        bonsaiScene.position.set(0, 0.5, 0); // Raised higher above the floor
+        bonsaiScene.rotation.y = Math.PI / 6; // Add a slight rotation for aesthetics
+      } catch (error) {
+        console.error("Error setting up bonsai model:", error);
+      }
+    } else {
+      console.error("Bonsai model not loaded correctly");
+    }
   }, [bonsaiScene]);
 
   // Create hexagonal shape vertices
@@ -190,6 +200,9 @@ export default function Room() {
 
       {/* Crystal cluster underneath the platform */}
       <CrystalCluster />
+
+      {/* Cosmic environment */}
+      <Stars />
       
       {/* Geometric Shapes */}
       <GeometricShapes />
