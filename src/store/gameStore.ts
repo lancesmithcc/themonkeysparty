@@ -3,13 +3,13 @@ import * as THREE from 'three';
 
 // Constants for platform bounds checking
 const PLATFORM_RADIUS = 4;
-const MOVEMENT_SPEED = 0.025; // Reduced base speed for smoother movement
-const MAX_SPEED = 0.05; // Maximum speed after acceleration
-const ACCELERATION = 0.0025; // How quickly player reaches max speed
-const DECELERATION = 0.005; // How quickly player slows down
-const COLLISION_DISTANCE = 0.8;
-const COLLISION_DURATION = 1500; // ms
-const COLLISION_KNOCKBACK = 0.5;
+const MOVEMENT_SPEED = 0.01;
+const MAX_SPEED = 0.02;
+const ACCELERATION = 0.001;
+const DECELERATION = 0.002;
+const COLLISION_DISTANCE = 0.4;
+const COLLISION_DURATION = 3000; // Milliseconds collision effect lasts
+const KNOCKBACK_FORCE = 0.15; // Force applied when characters collide
 
 // Helper function to check if a position is within hexagon bounds
 function isWithinHexagon(x: number, z: number, radius: number): boolean {
@@ -47,23 +47,32 @@ function getFibonacciNumber(n: number): number {
 export interface GameState {
   // Player state
   playerPosition: [number, number, number];
-  moveDirection: THREE.Vector3;
-  currentSpeed: number;
-  isPlayerMoving: boolean;
+  playerRotation: [number, number, number];
+  playerSpeed: [number, number, number];
+  isMoving: boolean;
   isStrafing: boolean;
+  currentSpeed: number;
+  movementDirection: [number, number];
+  moveDirection: THREE.Vector3;
+  isPlayerMoving: boolean;
+  
+  // Platform state
+  platformColor: [number, number, number];
   
   // NPC state
   npcPosition: [number, number, number];
-  npcMoveDirection: THREE.Vector3;
+  npcRotation: [number, number, number];
   npcTarget: [number, number, number];
   npcWanderTimer: number;
+  shouldNpcMove: boolean;
+  npcMoveDirection: THREE.Vector3;
   npcFibStep: number;
   npcFibDirection: number;
   
   // Collision state
   isColliding: boolean;
+  collisionPosition: [number, number, number];
   collisionTime: number;
-  collisionPosition: [number, number, number] | null;
   
   // Mobile state
   isMobile: boolean;
@@ -85,24 +94,33 @@ export interface GameState {
 
 export const useGameStore = create<GameState>((set, get) => ({
   // Player state
-  playerPosition: [0, 0, 0],
-  moveDirection: new THREE.Vector3(0, 0, 0),
-  currentSpeed: 0,
-  isPlayerMoving: false,
+  playerPosition: [2, 0, 2],
+  playerRotation: [0, 0, 0],
+  playerSpeed: [0, 0, 0],
+  isMoving: false,
   isStrafing: false,
+  currentSpeed: 0,
+  movementDirection: [0, 0],
+  moveDirection: new THREE.Vector3(),
+  isPlayerMoving: false,
+  
+  // Platform state
+  platformColor: [0.1, 0.5, 0.8],
   
   // NPC state
-  npcPosition: [2, 0, 2],
-  npcMoveDirection: new THREE.Vector3(0, 0, 0),
-  npcTarget: [2, 0, 2],
-  npcWanderTimer: 10, // Initialize with a small value to start moving immediately
-  npcFibStep: 1,
+  npcPosition: [-2, 0, -2],
+  npcRotation: [0, 0, 0],
+  npcTarget: [-2, 0, -2],
+  npcWanderTimer: 0,
+  shouldNpcMove: true,
+  npcMoveDirection: new THREE.Vector3(),
+  npcFibStep: 0,
   npcFibDirection: 0,
   
   // Collision state
   isColliding: false,
+  collisionPosition: [0, 0, 0],
   collisionTime: 0,
-  collisionPosition: null,
   
   // Mobile state
   isMobile: false,
@@ -357,69 +375,61 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Check for collision between player and NPC
   checkCollision: () => {
-    const { playerPosition, npcPosition, isColliding } = get();
-    
-    // Skip if already in collision
-    if (isColliding) return;
+    const { playerPosition, npcPosition, isColliding, collisionTime } = get();
     
     // Calculate distance between player and NPC
-    const playerPos = new THREE.Vector3(playerPosition[0], playerPosition[1], playerPosition[2]);
-    const npcPos = new THREE.Vector3(npcPosition[0], npcPosition[1], npcPosition[2]);
-    const distance = playerPos.distanceTo(npcPos);
+    const dx = npcPosition[0] - playerPosition[0];
+    const dz = npcPosition[2] - playerPosition[2];
+    const distance = Math.sqrt(dx * dx + dz * dz);
     
-    // Check if collision occurs
-    if (distance < COLLISION_DISTANCE) {
-      // Calculate collision point (midpoint between characters)
-      const collisionPoint: [number, number, number] = [
-        (playerPosition[0] + npcPosition[0]) / 2,
-        (playerPosition[1] + npcPosition[1]) / 2.5 + 0.5, // Raise collision point to be more visible
-        (playerPosition[2] + npcPosition[2]) / 2
-      ];
+    console.log("Distance between player and NPC:", distance);
+    
+    // If collision detected and not already in collision state
+    if (distance < COLLISION_DISTANCE && !isColliding) {
+      console.log("Collision detected!");
       
-      // Calculate knockback directions
-      const knockbackDirPlayer = new THREE.Vector3()
-        .subVectors(playerPos, npcPos)
-        .normalize()
-        .multiplyScalar(COLLISION_KNOCKBACK);
+      // Calculate the collision point (slightly above the ground for better visibility)
+      const collisionX = (playerPosition[0] + npcPosition[0]) / 2;
+      const collisionY = 0.3; // Raised up for better visibility
+      const collisionZ = (playerPosition[2] + npcPosition[2]) / 2;
       
-      const knockbackDirNpc = new THREE.Vector3()
-        .subVectors(npcPos, playerPos)
-        .normalize()
-        .multiplyScalar(COLLISION_KNOCKBACK);
+      // Calculate normalized direction vectors for knockback
+      const playerNormDx = dx / distance;
+      const playerNormDz = dz / distance;
       
-      // Apply knockback
-      const newPlayerPos: [number, number, number] = [
-        playerPosition[0] + knockbackDirPlayer.x,
-        playerPosition[1],
-        playerPosition[2] + knockbackDirPlayer.z
-      ];
+      // Apply knockback to player position (away from NPC)
+      const newPlayerX = playerPosition[0] - playerNormDx * KNOCKBACK_FORCE;
+      const newPlayerZ = playerPosition[2] - playerNormDz * KNOCKBACK_FORCE;
       
-      const newNpcPos: [number, number, number] = [
-        npcPosition[0] + knockbackDirNpc.x,
-        npcPosition[1],
-        npcPosition[2] + knockbackDirNpc.z
-      ];
+      // Apply knockback to NPC position (away from player)
+      const newNpcX = npcPosition[0] + playerNormDx * KNOCKBACK_FORCE;
+      const newNpcZ = npcPosition[2] + playerNormDz * KNOCKBACK_FORCE;
       
-      // Update state with collision info
-      set({
-        isColliding: true,
-        collisionTime: Date.now(),
-        collisionPosition: collisionPoint,
-        playerPosition: newPlayerPos,
-        npcPosition: newNpcPos,
-        currentSpeed: 0 // Reset player speed on collision
-      });
-      
-      // After collision, NPC should move in a new direction
+      // Set a timeout to resume NPC movement after collision
       setTimeout(() => {
-        if (!get().isColliding) return; // In case it's been reset by another collision
-        
         set({ 
           isColliding: false,
-          npcWanderTimer: 5 // Move again quickly after collision
+          shouldNpcMove: true
         });
-        get().setNewNpcTarget();
       }, COLLISION_DURATION);
+      
+      // Return updated state with collision information
+      set({
+        isColliding: true,
+        collisionPosition: [collisionX, collisionY, collisionZ],
+        collisionTime: Date.now(),
+        playerPosition: [newPlayerX, playerPosition[1], newPlayerZ],
+        npcPosition: [newNpcX, npcPosition[1], newNpcZ],
+        currentSpeed: 0 // Reset player speed on collision
+      });
+    }
+    
+    // If no longer in collision range but still in collision state
+    if (distance >= COLLISION_DISTANCE && isColliding && 
+        Date.now() - collisionTime >= COLLISION_DURATION) {
+      set({
+        isColliding: false
+      });
     }
   }
 }));
