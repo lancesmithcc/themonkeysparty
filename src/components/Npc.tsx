@@ -163,117 +163,129 @@ export default function Npc() {
   }, [actions, isMoving]);
 
   // Animation and movement in each frame
-  useFrame((state) => {
+  useFrame((_, delta) => {
     // Update NPC position through the store
     updateNpcPosition();
     
     // Ensure reference exists
     if (!ref.current) return;
     
-    // Apply position from store
-    ref.current.position.set(npcPosition[0], npcPosition[1], npcPosition[2]);
+    // Get positions from store
+    const {
+      npcPosition,
+      npcRotation,
+      npcMoveDirection
+    } = useGameStore.getState();
+
+    // Check if NPC is moving
+    const isMoving = npcMoveDirection && npcMoveDirection.length() > 0.001;
     
-    // Apply rotation from store if provided
-    if (npcRotation) {
-      ref.current.rotation.set(npcRotation[0], npcRotation[1], npcRotation[2]);
+    // Animation time for coordinated animations
+    const animTimeRef = useRef(0);
+    animTimeRef.current += delta * (isMoving ? 2.5 : 0.7);
+    const time = animTimeRef.current;
+    
+    // Personality factor for more individualized animations
+    const personalityFactor = useMemo(() => 0.8 + Math.random() * 0.4, []);
+    
+    // Apply position with natural motion
+    const currentPos = new THREE.Vector3(...npcPosition);
+    
+    // Apply position with smoothing
+    ref.current.position.lerp(currentPos, delta * 5);
+    
+    // Apply rotation with smoothing
+    const targetRotation = new THREE.Euler(0, npcRotation[1], 0);
+    
+    // Smooth rotation with slight overshoot for more dynamic movement
+    ref.current.rotation.y = THREE.MathUtils.lerp(
+      ref.current.rotation.y,
+      targetRotation.y,
+      delta * 3
+    );
+    
+    // Apply the interpolated rotation
+    ref.current.rotation.y = ref.current.rotation.y;
+    
+    // Add naturalistic movement
+    if (isMoving) {
+      // Walking bobbing
+      const bobHeight = Math.sin(time * 8) * 0.04;
+      ref.current.position.y += bobHeight;
+      
+      // Add lateral swagger (side-to-side sway)
+      const swayAmount = Math.sin(time * 4) * 0.025 * personalityFactor;
+      ref.current.position.x += swayAmount;
+      ref.current.position.z += swayAmount;
+      
+      // Slight forward tilt while walking
+      ref.current.rotation.x = 0.05;
+    } else {
+      // Subtle idle motion - breathing
+      const idleBob = Math.sin(time * 1.5) * 0.01;
+      ref.current.position.y += idleBob;
+      
+      // Reset any tilt
+      ref.current.rotation.x = THREE.MathUtils.lerp(
+        ref.current.rotation.x,
+        0,
+        delta * 2
+      );
     }
     
-    // Update aura time uniform
-    if (auraRef.current) {
-      const material = auraRef.current.material as THREE.ShaderMaterial;
-      material.uniforms.time.value = state.clock.getElapsedTime();
-    }
-    
-    // Manual bone animation for limbs if available
-    const time = state.clock.getElapsedTime();
+    // Manual bone animations for limbs
     ref.current.traverse((object) => {
       if (object instanceof THREE.Bone) {
         // Apply manual animations to specific bones by name pattern
         const name = object.name.toLowerCase();
         
-        // Animated limbs for movement
         if (isMoving) {
-          // Arms with more swagger and personality
+          // Enhanced arm swings with personality factor
           if (name.includes('arm') || name.includes('hand')) {
-            const baseSwing = Math.sin(time * 5) * 0.3;
-            const personalityFactor = Math.sin(time * 2.7) * 0.05; // Add some irregularity
-            
-            // Swing arms with different style for right vs left
-            if (name.includes('right')) {
-              object.rotation.x = baseSwing * 1.1 + personalityFactor; // Slightly exaggerated
-              // Add rotation in other axes for more lifelike movement
-              object.rotation.y = Math.sin(time * 3.3) * 0.05;
-              object.rotation.z = Math.sin(time * 2.5) * 0.07;
-            } else if (name.includes('left')) {
-              object.rotation.x = -baseSwing + personalityFactor; // Regular swing plus personality
-              // Add rotation in other axes for more lifelike movement
-              object.rotation.y = Math.sin(time * 3.7) * 0.05;
-              object.rotation.z = Math.sin(time * 2.9) * 0.07;
-            }
-            
-            // Add more motion for hands specifically
-            if (name.includes('hand')) {
-              object.rotation.z += Math.sin(time * 6) * 0.1;
-            }
+            const armSwing = Math.sin(time * 8) * 0.3 * personalityFactor;
+            object.rotation.x = -armSwing;
+            // Add slight sideways movement
+            object.rotation.z = Math.cos(time * 4) * 0.05;
           }
           
-          // Legs with more character
+          // Enhanced leg swings
           if (name.includes('leg') || name.includes('foot')) {
-            const baseSwing = Math.sin(time * 5) * 0.3;
-            const personalityFactor = Math.cos(time * 3.1) * 0.05; // Different phase for personality
-            
-            // Swing legs with more character
-            if (name.includes('right')) {
-              object.rotation.x = -baseSwing * 1.1 + personalityFactor;
-              // Add slight outward rotation for swagger
-              object.rotation.y = Math.sin(time * 2.5) * 0.03 + 0.02;
-              object.rotation.z = Math.cos(time * 3.1) * 0.04;
-            } else if (name.includes('left')) {
-              object.rotation.x = baseSwing * 1.2 + personalityFactor; // Slightly exaggerated
-              // Add slight outward rotation for swagger
-              object.rotation.y = Math.sin(time * 2.7) * 0.03 - 0.02;
-              object.rotation.z = Math.cos(time * 3.3) * 0.04;
-            }
-            
-            // Add more flex for feet specifically
-            if (name.includes('foot')) {
-              object.rotation.x += Math.sin(time * 10) * 0.07; // Quick flex at step points
-            }
+            const legSwing = Math.sin(time * 8) * 0.25 * personalityFactor;
+            object.rotation.x = legSwing;
           }
           
-          // Add subtle head movement if head bones exist
+          // Head movement while walking
           if (name.includes('head') || name.includes('neck')) {
-            // Look around slightly while walking
-            object.rotation.y = Math.sin(time * 1.7) * 0.1;
-            // Slight nod with movement
-            object.rotation.x = Math.sin(time * 3.3) * 0.05 + 0.03; // Slight downward tilt
+            // Subtle forward tilt with slight bobbing
+            object.rotation.x = Math.sin(time * 8) * 0.04 + 0.03;
+            // Look in direction of movement sometimes
+            object.rotation.y = Math.sin(time * 3) * 0.1;
+            // Slight tilt for personality
+            object.rotation.z = Math.sin(time * 4) * 0.02;
           }
         } else {
-          // Subtle idle motions with more character
+          // Idle animations - more subtle but still present
+          
+          // Subtle arm movements
           if (name.includes('arm') || name.includes('hand')) {
-            // More natural breathing motion
-            const breatheBase = Math.sin(time * 1.5) * 0.05;
-            const secondary = Math.sin(time * 2.3) * 0.02;
-            object.rotation.x = breatheBase + secondary;
-            
-            // Subtle shifts in other axes
-            object.rotation.y = Math.sin(time * 0.9) * 0.02;
-            object.rotation.z = Math.sin(time * 1.2) * 0.03;
+            const idleArmMove = Math.sin(time * 1.2) * 0.05;
+            object.rotation.x = idleArmMove;
+            object.rotation.z = Math.sin(time * 0.7) * 0.02;
           }
           
-          // Subtle leg movement while idle
+          // Nearly still legs during idle
           if (name.includes('leg') || name.includes('foot')) {
-            // Very subtle weight shifting
-            object.rotation.x = Math.sin(time * 1.1) * 0.02;
-            object.rotation.z = Math.sin(time * 0.7) * 0.01;
+            object.rotation.x = Math.sin(time * 0.5) * 0.02;
           }
           
-          // Add idle head movement
+          // Head idle movements - looking around occasionally
           if (name.includes('head') || name.includes('neck')) {
-            // Occasional looking around
-            object.rotation.y = Math.sin(time * 0.5) * 0.1;
-            // Slight curious tilting
-            object.rotation.z = Math.sin(time * 0.7) * 0.03;
+            // Look around slowly
+            object.rotation.y = Math.sin(time * 0.4) * 0.15;
+            // Slight nods
+            object.rotation.x = Math.sin(time * 0.6) * 0.05;
+            // Slight tilt
+            object.rotation.z = Math.sin(time * 0.3) * 0.03;
           }
         }
       }
@@ -324,7 +336,6 @@ export default function Npc() {
       ref.current.rotation.x += bounce;
     } else {
       // Improved idle animation
-      const time = state.clock.getElapsedTime();
       // Static position when not moving, with correct ground adjustment
       ref.current.position.set(
         npcPosition[0],

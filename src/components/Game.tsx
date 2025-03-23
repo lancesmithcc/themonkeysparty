@@ -10,6 +10,8 @@ import MobileControls from './MobileControls';
 import { useGameStore } from '../store/gameStore';
 import { KeyboardControls } from '@react-three/drei';
 import GeometricShapes from './GeometricShapes';
+import * as THREE from 'three';
+import Stars from './Stars';
 
 // Simple fallback component for loading
 function SimpleLoading() {
@@ -17,9 +19,7 @@ function SimpleLoading() {
 }
 
 export default function Game() {
-  // State to detect mobile devices
-  const isMobile = useGameStore(state => state.isMobile);
-  const setIsMobile = useGameStore(state => state.setIsMobile);
+  const { isColliding, collisionPosition, isMobile, setIsMobile } = useGameStore();
   const position = useGameStore(state => state.playerPosition);
   
   // Map keyboard controls to game actions
@@ -65,45 +65,56 @@ export default function Game() {
       <KeyboardControls
         map={keyMap}
       >
-        <Canvas shadows style={{ width: '100%', height: '100%' }}>
+        <Canvas 
+          shadows 
+          camera={{ position: [0, 5, 8], fov: 45 }}
+          gl={{ alpha: false }}
+          onCreated={({ gl }) => {
+            gl.setClearColor(new THREE.Color('#020209'));
+          }}
+        >
           {/* Debug stats - comment out in production */}
           {/* <Stats /> */}
           
-          {/* Set scene background color to black */}
-          <color attach="background" args={["#000000"]} />
-          <fog attach="fog" color="#000000" near={1} far={50} />
-          
-          <PerspectiveCamera makeDefault position={[0, 5, 5]} />
-          <OrbitControls 
-            target={[0, 0, 0]}
-            maxPolarAngle={Math.PI / 2}
-            enableZoom={true}
-            minDistance={2}
-            maxDistance={15}
-            zoomSpeed={1}
-          />
-          
-          {/* Increased ambient light */}
-          <ambientLight intensity={0.5} />
-          
-          {/* Added point light above character */}
-          <pointLight position={[10, 10, 10]} intensity={1.5} />
-          
-          {/* Directional light for general illumination */}
-          <directionalLight
-            position={[5, 5, 5]}
-            intensity={0.8}
+          <fog attach="fog" args={['#020209', 5, 20]} />
+          <ambientLight intensity={0.3} />
+          <directionalLight 
             castShadow
-            shadow-mapSize={[2048, 2048]}
+            position={[5, 8, 5]} 
+            intensity={1} 
+            shadow-mapSize-width={1024} 
+            shadow-mapSize-height={1024}
+            shadow-camera-far={20}
+            shadow-camera-left={-10}
+            shadow-camera-right={10}
+            shadow-camera-top={10}
+            shadow-camera-bottom={-10}
           />
           
-          <Suspense fallback={<SimpleLoading />}>
+          <Suspense fallback={null}>
+            <OrbitControls 
+              enableZoom={false} 
+              enablePan={false} 
+              minPolarAngle={Math.PI / 4} 
+              maxPolarAngle={Math.PI / 2.5}
+              rotateSpeed={0.5}
+            />
+            
+            <Stars />
             <Room />
-            <GeometricShapes />
             <Player position={position} />
             <Npc />
             <SecondNpc />
-            <CollisionEffect />
+            <GeometricShapes />
+            
+            {/* Render collision effect when collision is detected */}
+            {isColliding && (
+              <CollisionEffect position={new THREE.Vector3(
+                collisionPosition[0], 
+                collisionPosition[1], 
+                collisionPosition[2]
+              )} />
+            )}
           </Suspense>
         </Canvas>
       </KeyboardControls>

@@ -36,23 +36,34 @@ function createFallbackTexture() {
   return texture;
 }
 
+interface CollisionEffectProps {
+  position?: THREE.Vector3;
+}
+
 // Sparks particle system for collision effect
-export default function CollisionEffect() {
+export default function CollisionEffect({ position }: CollisionEffectProps) {
   const { isColliding, collisionPosition, collisionTime } = useGameStore((state) => ({
     isColliding: state.isColliding,
     collisionPosition: state.collisionPosition,
     collisionTime: state.collisionTime
   }));
   
+  // Use provided position or fall back to store position
+  const effectPosition = position || new THREE.Vector3(
+    collisionPosition[0],
+    collisionPosition[1],
+    collisionPosition[2]
+  );
+  
   // Debug logging for collision state
   useEffect(() => {
     if (isColliding) {
       console.log("Collision effect activated:", {
-        position: collisionPosition,
+        position: position || collisionPosition,
         time: collisionTime
       });
     }
-  }, [isColliding, collisionPosition, collisionTime]);
+  }, [isColliding, position, collisionPosition, collisionTime]);
   
   // Refs for particles
   const particlesRef = useRef<THREE.Points>(null);
@@ -206,7 +217,7 @@ export default function CollisionEffect() {
   
   // Handle collision - reset particles
   useEffect(() => {
-    if (isColliding && particlesRef.current && collisionPosition) {
+    if (isColliding && particlesRef.current) {
       const positions = particlesRef.current.geometry.getAttribute('position');
       const velocities = particles.velocities;
       
@@ -215,9 +226,9 @@ export default function CollisionEffect() {
         // Small random offset from collision point
         positions.setXYZ(
           i,
-          collisionPosition[0] + (Math.random() - 0.5) * 0.05,
-          collisionPosition[1] + (Math.random() - 0.5) * 0.05, 
-          collisionPosition[2] + (Math.random() - 0.5) * 0.05
+          effectPosition.x + (Math.random() - 0.5) * 0.05,
+          effectPosition.y + (Math.random() - 0.5) * 0.05, 
+          effectPosition.z + (Math.random() - 0.5) * 0.05
         );
         
         // New random velocity in all directions
@@ -232,7 +243,7 @@ export default function CollisionEffect() {
       
       positions.needsUpdate = true;
     }
-  }, [isColliding, collisionTime, collisionPosition, particles]);
+  }, [isColliding, collisionTime, effectPosition, particles]);
   
   // Animation logic
   useFrame((state) => {
@@ -276,13 +287,9 @@ export default function CollisionEffect() {
     }
     
     // Update the center glow
-    if (glowRef.current && collisionPosition) {
+    if (glowRef.current) {
       // Position the glow at the collision point
-      glowRef.current.position.set(
-        collisionPosition[0],
-        collisionPosition[1],
-        collisionPosition[2]
-      );
+      glowRef.current.position.copy(effectPosition);
       
       // Pulse size effect
       const timeSinceCollision = time - collisionTime / 1000;
