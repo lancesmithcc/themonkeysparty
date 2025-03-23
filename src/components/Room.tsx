@@ -1,6 +1,7 @@
 import RetroTV from './RetroTV';
 import Stars from './Stars';
 import GeometricShapes from './GeometricShapes';
+import CrystalCluster from './CrystalCluster';
 import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -187,6 +188,9 @@ export default function Room() {
           side={THREE.DoubleSide}
         />
       </mesh>
+
+      {/* Crystal cluster underneath the platform */}
+      <CrystalCluster />
 
       {/* Cosmic environment */}
       <Stars />
