@@ -203,7 +203,7 @@ export default function Player({ position }: { position: [number, number, number
     });
     
     // Update player position using the gameStore function
-    updatePosition(delta);
+    updatePosition();
     
     // Update visual position and animation effects
     if (moveDirection.length() > 0) {

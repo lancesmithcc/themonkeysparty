@@ -28,6 +28,7 @@ export interface GameState {
   playerPosition: [number, number, number];
   moveDirection: THREE.Vector3;
   isPlayerMoving: boolean;
+  isStrafing: boolean;
   
   // NPC state
   npcPosition: [number, number, number];
@@ -63,6 +64,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   playerPosition: [0, 0, 0],
   moveDirection: new THREE.Vector3(0, 0, 0),
   isPlayerMoving: false,
+  isStrafing: false,
   
   // NPC state
   npcPosition: [2, 0, 2],
@@ -81,8 +83,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Set the movement direction based on key input
   handleKeyDown: (e) => {
-    const { moveDirection } = get();
+    const { moveDirection, isStrafing } = get();
     const newDirection = new THREE.Vector3(moveDirection.x, moveDirection.y, moveDirection.z);
+    
+    // Toggle strafing mode
+    if (e.key === 'Shift') {
+      set({ isStrafing: true });
+      return;
+    }
     
     switch (e.key) {
       case 'w':
@@ -115,8 +123,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   
   // Clear the movement direction when key is released
   handleKeyUp: (e) => {
-    const { moveDirection } = get();
+    const { moveDirection, isStrafing } = get();
     const newDirection = new THREE.Vector3(moveDirection.x, moveDirection.y, moveDirection.z);
+    
+    // Reset strafing mode
+    if (e.key === 'Shift') {
+      set({ isStrafing: false });
+      return;
+    }
     
     switch (e.key) {
       case 'w':
